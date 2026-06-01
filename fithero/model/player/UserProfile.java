@@ -1,9 +1,12 @@
-package com.fithero.model.player;
+package fithero.model.player;
 
+/**
+ * 身型生物特徵數據模型
+ */
 public class UserProfile {
     private double height;
     private double weight;
-    private Gender gender; // 新增性別欄位
+    private Gender gender; 
 
     public UserProfile(double height, double weight, Gender gender) {
         this.height = height;
@@ -16,4 +19,5 @@ public class UserProfile {
     public double getWeight() { return weight; }
     public void setWeight(double weight) { this.weight = weight; }
     public Gender getGender() { return gender; }
+    public void setGender(Gender gender) { this.gender = gender; }
 }

@@ -1,4 +1,4 @@
-package com.fithero.model.player;
+package fithero.model.player;
 
 public enum Gender {
     MALE,

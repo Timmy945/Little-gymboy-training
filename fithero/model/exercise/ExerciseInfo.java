@@ -1,15 +1,18 @@
-package com.fithero.model.exercise;
+package fithero.model.exercise;
 
+/**
+ * 單一運動項目的科學屬性模型
+ */
 public class ExerciseInfo {
-    private String name;
-    private boolean isAerobic; // true: 有氧, false: 重訓
-    private double metValue;   // 有氧專用 (METs)
-    private String targetMuscle; // 刺激的主肌肉群 ("Chest", "Legs", "Back", "Core", "Arms", "FullBody")
-    private boolean isBodyweight; // 重訓專用 (是否為自重訓練)
-    private double difficultyCoefficient; // 重訓動作難度係數
+    private final String name;
+    private final boolean isAerobic; 
+    private final double metValue;   
+    private final MuscleGroup targetMuscle; // 升級為強型別，杜絕字串拼錯 Bug
+    private final boolean isBodyweight; 
+    private final double difficultyCoefficient; 
 
     // 有氧運動建構子
-    public ExerciseInfo(String name, double metValue, String targetMuscle) {
+    public ExerciseInfo(String name, double metValue, MuscleGroup targetMuscle) {
         this.name = name;
         this.isAerobic = true;
         this.metValue = metValue;
@@ -19,7 +22,7 @@ public class ExerciseInfo {
     }
 
     // 重訓運動建構子
-    public ExerciseInfo(String name, String targetMuscle, boolean isBodyweight, double difficultyCoefficient) {
+    public ExerciseInfo(String name, MuscleGroup targetMuscle, boolean isBodyweight, double difficultyCoefficient) {
         this.name = name;
         this.isAerobic = false;
         this.metValue = 0.0;
@@ -28,11 +31,10 @@ public class ExerciseInfo {
         this.difficultyCoefficient = difficultyCoefficient;
     }
 
-    // Getters
     public String getName() { return name; }
     public boolean isAerobic() { return isAerobic; }
     public double getMetValue() { return metValue; }
-    public String getTargetMuscle() { return targetMuscle; }
+    public MuscleGroup getTargetMuscle() { return targetMuscle; }
     public boolean isBodyweight() { return isBodyweight; }
     public double getDifficultyCoefficient() { return difficultyCoefficient; }
 }
