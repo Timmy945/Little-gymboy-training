@@ -4,48 +4,48 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 70種科學運動中央註冊表資料庫
+ * 70種科學運動中央註冊表資料庫（完全去耦合完美版）
  */
 public class ExerciseRegistry {
     private static final Map<String, ExerciseInfo> registry = new HashMap<>();
 
     static {
         // ==================== 有氧運動 (共 30 種) ====================
-        registry.put("慢跑 (輕鬆)", new ExerciseInfo("慢跑 (輕鬆)", 7.0, MuscleGroup.LEGS));
-        registry.put("快跑 (高強度)", new ExerciseInfo("快跑 (高強度)", 11.0, MuscleGroup.LEGS));
-        registry.put("健走", new ExerciseInfo("健走", 4.3, MuscleGroup.LEGS));
-        registry.put("散步", new ExerciseInfo("散步", 2.9, MuscleGroup.LEGS));
-        registry.put("越野跑", new ExerciseInfo("越野跑", 9.0, MuscleGroup.LEGS));
+        registry.put("慢跑 (輕鬆)", new ExerciseInfo("慢跑 (輕鬆)", 7.0));
+        registry.put("快跑 (高強度)", new ExerciseInfo("快跑 (高強度)", 11.0));
+        registry.put("健走", new ExerciseInfo("健走", 4.3));
+        registry.put("散步", new ExerciseInfo("散步", 2.9));
+        registry.put("越野跑", new ExerciseInfo("越野跑", 9.0));
         
-        registry.put("游泳 (蛙式)", new ExerciseInfo("游泳 (蛙式)", 5.3, MuscleGroup.CHEST)); // 修正 FullBody 為主要驅動肌群
-        registry.put("游泳 (自由式)", new ExerciseInfo("游泳 (自由式)", 8.0, MuscleGroup.BACK));
-        registry.put("騎自行車 (休閒)", new ExerciseInfo("騎自行車 (休閒)", 6.0, MuscleGroup.LEGS));
-        registry.put("騎自行車 (競速)", new ExerciseInfo("騎自行車 (競速)", 10.0, MuscleGroup.LEGS));
-        registry.put("跳繩 (慢速)", new ExerciseInfo("跳繩 (慢速)", 8.8, MuscleGroup.LEGS));
+        registry.put("游泳 (蛙式)", new ExerciseInfo("游泳 (蛙式)", 5.3));
+        registry.put("游泳 (自由式)", new ExerciseInfo("游泳 (自由式)", 8.0));
+        registry.put("騎自行車 (休閒)", new ExerciseInfo("騎自行車 (休閒)", 6.0));
+        registry.put("騎自行車 (競速)", new ExerciseInfo("騎自行車 (競速)", 10.0));
+        registry.put("跳繩 (慢速)", new ExerciseInfo("跳繩 (慢速)", 8.8));
         
-        registry.put("跳繩 (快速)", new ExerciseInfo("跳繩 (快速)", 12.3, MuscleGroup.LEGS));
-        registry.put("尊巴舞蹈 (Zumba)", new ExerciseInfo("尊巴舞蹈 (Zumba)", 6.5, MuscleGroup.ABS));
-        registry.put("嘻哈街舞", new ExerciseInfo("嘻哈街舞", 5.0, MuscleGroup.ABS));
-        registry.put("高強度有氧循環 (HIIT)", new ExerciseInfo("高強度有氧循環 (HIIT)", 8.0, MuscleGroup.CHEST));
-        registry.put("Tabata 循環", new ExerciseInfo("Tabata 循環", 8.5, MuscleGroup.ABS));
+        registry.put("跳繩 (快速)", new ExerciseInfo("跳繩 (快速)", 12.3));
+        registry.put("尊巴舞蹈 (Zumba)", new ExerciseInfo("尊巴舞蹈 (Zumba)", 6.5));
+        registry.put("嘻哈街舞", new ExerciseInfo("嘻哈街舞", 5.0));
+        registry.put("高強度有氧循環 (HIIT)", new ExerciseInfo("高強度有氧循環 (HIIT)", 8.0));
+        registry.put("Tabata 循環", new ExerciseInfo("Tabata 循環", 8.5));
         
-        registry.put("飛輪車 (高強度)", new ExerciseInfo("飛輪車 (高強度)", 8.5, MuscleGroup.LEGS));
-        registry.put("登階機", new ExerciseInfo("登階機", 9.0, MuscleGroup.LEGS));
-        registry.put("划船機", new ExerciseInfo("划船機", 7.0, MuscleGroup.BACK));
-        registry.put("橢圓機", new ExerciseInfo("橢圓機", 5.0, MuscleGroup.LEGS));
-        registry.put("有氧拳擊 (BodyCombat)", new ExerciseInfo("有氧拳擊 (BodyCombat)", 7.8, MuscleGroup.ARMS));
+        registry.put("飛輪車 (高強度)", new ExerciseInfo("飛輪車 (高強度)", 8.5));
+        registry.put("登階機", new ExerciseInfo("登階機", 9.0));
+        registry.put("划船機", new ExerciseInfo("划船機", 7.0));
+        registry.put("橢圓機", new ExerciseInfo("橢圓機", 5.0));
+        registry.put("有氧拳擊 (BodyCombat)", new ExerciseInfo("有氧拳擊 (BodyCombat)", 7.8));
         
-        registry.put("籃球 (全場比賽)", new ExerciseInfo("籃球 (全場比賽)", 8.0, MuscleGroup.LEGS));
-        registry.put("籃球 (投籃練習)", new ExerciseInfo("籃球 (投籃練習)", 4.5, MuscleGroup.ARMS));
-        registry.put("足球", new ExerciseInfo("足球", 7.0, MuscleGroup.LEGS));
-        registry.put("羽毛球 (單打)", new ExerciseInfo("羽毛球 (單打)", 7.0, MuscleGroup.ARMS));
-        registry.put("羽毛球 (雙打)", new ExerciseInfo("羽毛球 (雙打)", 4.5, MuscleGroup.LEGS));
+        registry.put("籃球 (全場比賽)", new ExerciseInfo("籃球 (全場比賽)", 8.0));
+        registry.put("籃球 (投籃練習)", new ExerciseInfo("籃球 (投籃練習)", 4.5));
+        registry.put("足球", new ExerciseInfo("足球", 7.0));
+        registry.put("羽毛球 (單打)", new ExerciseInfo("羽毛球 (單打)", 7.0));
+        registry.put("羽毛球 (雙打)", new ExerciseInfo("羽毛球 (雙打)", 4.5));
         
-        registry.put("網球", new ExerciseInfo("網球", 7.3, MuscleGroup.ARMS));
-        registry.put("排球", new ExerciseInfo("排球", 4.0, MuscleGroup.LEGS));
-        registry.put("桌球 (乒乓球)", new ExerciseInfo("桌球 (乒乓球)", 4.0, MuscleGroup.ARMS));
-        registry.put("壁球", new ExerciseInfo("壁球", 12.0, MuscleGroup.LEGS));
-        registry.put("棒式核心維持", new ExerciseInfo("棒式核心維持", 3.3, MuscleGroup.ABS));
+        registry.put("網球", new ExerciseInfo("網球", 7.3));
+        registry.put("排球", new ExerciseInfo("排球", 4.0));
+        registry.put("桌球 (乒乓球)", new ExerciseInfo("桌球 (乒乓球)", 4.0));
+        registry.put("壁球", new ExerciseInfo("壁球", 12.0));
+        registry.put("棒式核心維持", new ExerciseInfo("棒式核心維持", 3.3));
 
         // ==================== 重訓 / 阻力訓練 (共 40 種) ====================
         registry.put("伏地挺身", new ExerciseInfo("伏地挺身", MuscleGroup.CHEST, true, 1.0));
@@ -83,7 +83,7 @@ public class ExerciseRegistry {
 
         registry.put("啞鈴二頭彎舉", new ExerciseInfo("啞鈴二頭彎舉", MuscleGroup.ARMS, false, 3.5));
         registry.put("槓鈴上舉肩推", new ExerciseInfo("槓鈴上舉肩推", MuscleGroup.ARMS, false, 1.4));
-        registry.put("啞鈴側平舉", new ExerciseInfo("啞鈴側平舉", MuscleGroup.ARMS, false, 5.0)); 
+        registry.put("啞鈴側平舉", new ExerciseInfo("啞鈴側平举", MuscleGroup.ARMS, false, 5.0)); 
         registry.put("滑輪三頭下壓", new ExerciseInfo("滑輪三頭下壓", MuscleGroup.ARMS, false, 2.0));
         registry.put("啞鈴錘式彎舉", new ExerciseInfo("啞鈴錘式彎舉", MuscleGroup.ARMS, false, 3.2));
         registry.put("仰臥起坐", new ExerciseInfo("仰臥起坐", MuscleGroup.ABS, true, 1.0));

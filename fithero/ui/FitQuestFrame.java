@@ -3,6 +3,7 @@ package fithero.ui;
 import fithero.infra.Storage;
 import fithero.logic.manager.PlayerState;
 import fithero.logic.manager.FitnessGoal;
+import fithero.model.achievement.Achievement;
 import fithero.model.player.Gender;
 import fithero.model.workout.WorkoutEntry;
 import fithero.model.exercise.ExerciseRegistry;
@@ -33,6 +34,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -51,9 +53,6 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
 
-/**
- * 應用程式主視窗框架：已完成跨套件低耦合重構，實作全域分頁指針與重置管線。
- */
 public class FitQuestFrame extends JFrame {
     private static final Color APP_BG = new Color(0x1e222b);
     private static final Color PANEL_BG = new Color(0x282c37);
@@ -89,6 +88,7 @@ public class FitQuestFrame extends JFrame {
     private JTextField ageField; 
     private JTextField heightField;
     private JTextField weightField;
+    private JTextField fatField; // 全新擴充：體脂率輸入框
     private JTextField targetWeightField; 
     private JComboBox<Gender> genderBox;
     private JComboBox<FitnessGoal> goalBox; 
@@ -97,12 +97,12 @@ public class FitQuestFrame extends JFrame {
     private JLabel bmrLiveLabel;
     private JLabel tdeeLiveLabel;
     private JLabel recommendCalLabel; 
+    private JLabel muscleLiveLabel; // 全新擴充：預估肌肉量科學標籤
 
     private final DefaultTableModel historyModel = new DefaultTableModel(
             new String[] {"時間", "訓練項目", "數量/時間", "訓練組數"}, 0
     ) {
-        @Override
-        public boolean isCellEditable(int row, int column) { return false; } 
+        @Override public boolean isCellEditable(int row, int column) { return false; } 
     };
 
     public PlayerState getPlayerState() { return this.player; }
@@ -138,9 +138,7 @@ public class FitQuestFrame extends JFrame {
         add(globalTopBar, BorderLayout.NORTH); 
         add(pageContainer, BorderLayout.CENTER); 
 
-        // 開機自動掃描一次昨日未完訓狀態
         this.calendarPage.runBootUpStreakCheck(player);
-
         refreshAll(); 
         showPage("home");
         setLocationRelativeTo(null); 
@@ -148,8 +146,7 @@ public class FitQuestFrame extends JFrame {
 
     private JButton createHoverNavigationGear() {
         JPopupMenu navMenu = new JPopupMenu();
-        navMenu.setBackground(PANEL_BG);
-        navMenu.setBorder(BorderFactory.createLineBorder(BORDER));
+        navMenu.setBackground(PANEL_BG); navMenu.setBorder(BorderFactory.createLineBorder(BORDER));
 
         String[] menuLabels = {"首頁", "運動行事曆", "榮譽成就牆", "個人資料"};
         String[] menuKeys = {"home", "calendar", "analytics", "profile"};
@@ -160,21 +157,10 @@ public class FitQuestFrame extends JFrame {
             item.setFont(new Font(FONT_FAMILY, Font.BOLD, 14));
             item.setForeground(TEXT); item.setBackground(PANEL_BG); item.setOpaque(true);
             item.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
-            
-            item.addActionListener(e -> {
-                showPage(targetPage);
-                navMenu.setVisible(false); 
-            });
-
+            item.addActionListener(e -> { showPage(targetPage); navMenu.setVisible(false); });
             item.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    item.setBackground(NAV_SELECTED); item.setForeground(ACCENT);
-                }
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    item.setBackground(PANEL_BG); item.setForeground(TEXT);
-                }
+                @Override public void mouseEntered(MouseEvent e) { item.setBackground(NAV_SELECTED); item.setForeground(ACCENT); }
+                @Override public void mouseExited(MouseEvent e) { item.setBackground(PANEL_BG); item.setForeground(TEXT); }
             });
             navMenu.add(item);
         }
@@ -182,128 +168,92 @@ public class FitQuestFrame extends JFrame {
         JButton gearButton = new JButton("⚙");
         gearButton.setFont(new Font(FONT_FAMILY, Font.BOLD, 24));
         gearButton.setForeground(TEXT); gearButton.setBackground(PANEL_BG);
-        gearButton.setOpaque(true); gearButton.setContentAreaFilled(true);
-        gearButton.setBorderPainted(false); gearButton.setFocusPainted(false);
-        gearButton.setPreferredSize(new Dimension(52, 44));
-        gearButton.setBorder(BorderFactory.createLineBorder(BORDER));
+        gearButton.setOpaque(true); gearButton.setContentAreaFilled(true); gearButton.setBorderPainted(false); gearButton.setFocusPainted(false);
+        gearButton.setPreferredSize(new Dimension(52, 44)); gearButton.setBorder(BorderFactory.createLineBorder(BORDER));
 
-        MouseAdapter hoverRadar = new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) { navMenu.show(gearButton, 0, gearButton.getHeight()); }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                Point mousePos = MouseInfo.getPointerInfo().getLocation();
-                SwingUtilities.convertPointFromScreen(mousePos, navMenu);
-                if (!navMenu.contains(mousePos)) navMenu.setVisible(false); 
-            }
-        };
-        gearButton.addMouseListener(hoverRadar);
+        gearButton.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { navMenu.show(gearButton, 0, gearButton.getHeight()); }
+        });
         return gearButton;
     }
 
     private JPanel createProfilePage() {
         JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(APP_BG);
-        page.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        page.setBackground(APP_BG); page.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
 
-        JPanel wrapperPanel = sectionPanel();
-        wrapperPanel.setLayout(new BorderLayout(0, 12));
+        JPanel wrapperPanel = sectionPanel(); wrapperPanel.setLayout(new BorderLayout(0, 12));
+        wrapperPanel.add(sectionTitle("個人生物特徵與目標體重設定"), BorderLayout.NORTH);
 
-        JLabel titleLabel = sectionTitle("個人生物特徵與目標體重設定");
-        wrapperPanel.add(titleLabel, BorderLayout.NORTH);
-
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setOpaque(false);
+        JPanel formPanel = new JPanel(new GridBagLayout()); formPanel.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6, 15, 6, 15);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(4, 15, 4, 15); gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        Font labelFont = new Font(FONT_FAMILY, Font.BOLD, 15);
-        Font inputFont = new Font(FONT_FAMILY, Font.PLAIN, 15);
+        Font labelFont = new Font(FONT_FAMILY, Font.BOLD, 14);
+        Font inputFont = new Font(FONT_FAMILY, Font.PLAIN, 14);
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.15;
-        JLabel nameLabel = new JLabel("使用者暱稱：");
-        nameLabel.setFont(labelFont); nameLabel.setForeground(TEXT);
+        JLabel nameLabel = new JLabel("使用者暱稱："); nameLabel.setFont(labelFont); nameLabel.setForeground(TEXT);
         formPanel.add(nameLabel, gbc);
-
         gbc.gridx = 1; gbc.weightx = 0.85;
-        nameField = new JTextField(); setupInputField(nameField, inputFont);
-        formPanel.add(nameField, gbc);
+        nameField = new JTextField(); setupInputField(nameField, inputFont); formPanel.add(nameField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.15;
-        JLabel ageLabel = new JLabel("當前年齡：");
-        ageLabel.setFont(labelFont); ageLabel.setForeground(TEXT);
+        JLabel ageLabel = new JLabel("當前年齡："); ageLabel.setFont(labelFont); ageLabel.setForeground(TEXT);
         formPanel.add(ageLabel, gbc);
-
         gbc.gridx = 1; gbc.weightx = 0.85;
-        ageField = new JTextField(); setupInputField(ageField, inputFont);
-        formPanel.add(ageField, gbc);
+        ageField = new JTextField(); setupInputField(ageField, inputFont); formPanel.add(ageField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.15;
-        JLabel heightLabel = new JLabel("現時身高 (cm)：");
-        heightLabel.setFont(labelFont); heightLabel.setForeground(TEXT);
+        JLabel heightLabel = new JLabel("現時身高 (cm)："); heightLabel.setFont(labelFont); heightLabel.setForeground(TEXT);
         formPanel.add(heightLabel, gbc);
-
         gbc.gridx = 1; gbc.weightx = 0.85;
-        heightField = new JTextField(); setupInputField(heightField, inputFont);
-        formPanel.add(heightField, gbc);
+        heightField = new JTextField(); setupInputField(heightField, inputFont); formPanel.add(heightField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.15;
-        JLabel weightLabel = new JLabel("現時體重 (kg)：");
-        weightLabel.setFont(labelFont); weightLabel.setForeground(TEXT);
+        JLabel weightLabel = new JLabel("現時體重 (kg)："); weightLabel.setFont(labelFont); weightLabel.setForeground(TEXT);
         formPanel.add(weightLabel, gbc);
-
         gbc.gridx = 1; gbc.weightx = 0.85;
-        weightField = new JTextField(); setupInputField(weightField, inputFont);
-        formPanel.add(weightField, gbc);
+        weightField = new JTextField(); setupInputField(weightField, inputFont); formPanel.add(weightField, gbc);
 
+        // 【優化點 1】新增體脂率輸入欄位
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.15;
-        JLabel targetWeightLabel = new JLabel("目標體重 (kg)：");
-        targetWeightLabel.setFont(labelFont); targetWeightLabel.setForeground(ACCENT);
-        formPanel.add(targetWeightLabel, gbc);
-
+        JLabel fatLabel = new JLabel("體脂肪率 (%, 選填)："); fatLabel.setFont(labelFont); fatLabel.setForeground(ACCENT);
+        formPanel.add(fatLabel, gbc);
         gbc.gridx = 1; gbc.weightx = 0.85;
-        targetWeightField = new JTextField(); setupInputField(targetWeightField, inputFont);
-        formPanel.add(targetWeightField, gbc);
+        fatField = new JTextField(); setupInputField(fatField, inputFont); formPanel.add(fatField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 5; gbc.weightx = 0.15;
-        JLabel genderLabel = new JLabel("生物學性別：");
-        genderLabel.setFont(labelFont); genderLabel.setForeground(TEXT);
-        formPanel.add(genderLabel, gbc);
-
+        JLabel targetWeightLabel = new JLabel("目標體重 (kg)："); targetWeightLabel.setFont(labelFont); targetWeightLabel.setForeground(TEXT);
+        formPanel.add(targetWeightLabel, gbc);
         gbc.gridx = 1; gbc.weightx = 0.85;
-        genderBox = new JComboBox<>(Gender.values());
-        genderBox.setFont(inputFont); genderBox.setBackground(CELL_BG); genderBox.setForeground(TEXT);
-        genderBox.setBorder(BorderFactory.createLineBorder(BORDER));
-        genderBox.addActionListener(e -> triggerLiveScientificCalcs());
-        setupComboBoxTheme(genderBox);
-        formPanel.add(genderBox, gbc);
+        targetWeightField = new JTextField(); setupInputField(targetWeightField, inputFont); formPanel.add(targetWeightField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 6; gbc.weightx = 0.15;
-        JLabel goalLabel = new JLabel("體態核心目標：");
-        goalLabel.setFont(labelFont); goalLabel.setForeground(TEXT);
-        formPanel.add(goalLabel, gbc);
-
+        JLabel genderLabel = new JLabel("生物學性別："); genderLabel.setFont(labelFont); genderLabel.setForeground(TEXT);
+        formPanel.add(genderLabel, gbc);
         gbc.gridx = 1; gbc.weightx = 0.85;
-        goalBox = new JComboBox<>(FitnessGoal.values());
-        goalBox.setFont(inputFont); goalBox.setBackground(CELL_BG); goalBox.setForeground(TEXT);
-        goalBox.setBorder(BorderFactory.createLineBorder(BORDER));
-        goalBox.addActionListener(e -> triggerLiveScientificCalcs());
-        setupComboBoxTheme(goalBox);
-        formPanel.add(goalBox, gbc);
+        genderBox = new JComboBox<>(Gender.values()); genderBox.setFont(inputFont); setupComboBoxTheme(genderBox);
+        genderBox.addActionListener(e -> triggerLiveScientificCalcs()); formPanel.add(genderBox, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2; gbc.insets = new Insets(12, 15, 5, 15);
-        JPanel calcReportPanel = new JPanel(new GridLayout(2, 2, 15, 10));
+        gbc.gridx = 0; gbc.gridy = 7; gbc.weightx = 0.15;
+        JLabel goalLabel = new JLabel("體態核心目標："); goalLabel.setFont(labelFont); goalLabel.setForeground(TEXT);
+        formPanel.add(goalLabel, gbc);
+        gbc.gridx = 1; gbc.weightx = 0.85;
+        goalBox = new JComboBox<>(FitnessGoal.values()); goalBox.setFont(inputFont); setupComboBoxTheme(goalBox);
+        goalBox.addActionListener(e -> triggerLiveScientificCalcs()); formPanel.add(goalBox, gbc);
+
+        // 加大科研回報面板
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2; gbc.insets = new Insets(10, 15, 5, 15);
+        JPanel calcReportPanel = new JPanel(new GridLayout(3, 2, 15, 8)); // 擴展為 3x2 網格
         calcReportPanel.setBackground(CELL_BG);
-        calcReportPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER, 1), BorderFactory.createEmptyBorder(10, 14, 10, 14)
-        ));
+        calcReportPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER, 1), BorderFactory.createEmptyBorder(10, 14, 10, 14)));
 
         bmiLiveLabel = createReportBlock(calcReportPanel, "身體質量指數 (BMI)");
-        bmrLiveLabel = createReportBlock(calcReportPanel, "基礎代謝率 (BMR)");
-        tdeeLiveLabel = createReportBlock(calcReportPanel, "每日總熱量消耗 (TDEE)");
-        recommendCalLabel = createReportBlock(calcReportPanel, "每日建議熱量攝取 / 消耗推薦");
-        recommendCalLabel.setForeground(new Color(46, 204, 113)); 
+        bmrLiveLabel = createReportBlock(calcReportPanel, "基礎代謝率 (BMR) [雙引擎自適應]");
+        tdeeLiveLabel = createReportBlock(calcReportPanel, "每日總熱量消耗 (TDEE) [智慧動態滾動]");
+        recommendCalLabel = createReportBlock(calcReportPanel, "每日建議熱量攝取");
+        muscleLiveLabel = createReportBlock(calcReportPanel, "全身預估精準肌肉量 (Muscle Mass)"); // 補上第 5 看板
+        muscleLiveLabel.setForeground(new Color(241, 196, 15)); // 精緻鵝黃金
 
         formPanel.add(calcReportPanel, gbc);
 
@@ -315,14 +265,13 @@ public class FitQuestFrame extends JFrame {
         ageField.getDocument().addDocumentListener(liveEngine);
         heightField.getDocument().addDocumentListener(liveEngine);
         weightField.getDocument().addDocumentListener(liveEngine);
+        fatField.getDocument().addDocumentListener(liveEngine); // 體脂加入監聽
 
         wrapperPanel.add(formPanel, BorderLayout.CENTER);
 
-        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 5));
-        btnRow.setOpaque(false);
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 5)); btnRow.setOpaque(false);
         JButton saveBtn = new JButton("儲存修改並更新冒險者狀態");
-        saveBtn.setFont(new Font(FONT_FAMILY, Font.BOLD, 16));
-        applySolidButtonStyle(saveBtn, CTA_BLUE, Color.WHITE);
+        saveBtn.setFont(new Font(FONT_FAMILY, Font.BOLD, 16)); applySolidButtonStyle(saveBtn, CTA_BLUE, Color.WHITE);
         saveBtn.setBorder(BorderFactory.createEmptyBorder(10, 40, 10, 40));
         saveBtn.addActionListener(e -> handleProfileSave());
         btnRow.add(saveBtn);
@@ -332,18 +281,22 @@ public class FitQuestFrame extends JFrame {
         return page;
     }
 
+    private JLabel createReportBlock(JPanel parent, String title) {
+        JPanel sub = new JPanel(new BorderLayout()); sub.setOpaque(false);
+        JLabel titleL = new JLabel(title); titleL.setFont(new Font(FONT_FAMILY, Font.BOLD, 12)); titleL.setForeground(MUTED);
+        JLabel valL = new JLabel("0.0", SwingConstants.LEFT); valL.setFont(new Font(FONT_FAMILY, Font.BOLD, 16)); valL.setForeground(ACCENT);
+        sub.add(titleL, BorderLayout.NORTH); sub.add(valL, BorderLayout.CENTER);
+        parent.add(sub);
+        return valL;
+    }
+
     private <T> void setupComboBoxTheme(JComboBox<T> box) {
+        box.setBackground(CELL_BG); box.setForeground(TEXT); box.setBorder(BorderFactory.createLineBorder(BORDER));
         box.setRenderer(new ListCellRenderer<T>() {
-            @Override
-            public Component getListCellRendererComponent(JList<? extends T> list, T value, int index, boolean isSelected, boolean cellHasFocus) {
-                JLabel lbl = new JLabel(value != null ? value.toString() : "");
-                lbl.setOpaque(true); lbl.setFont(new Font(FONT_FAMILY, Font.PLAIN, 14));
-                lbl.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
-                if (isSelected) {
-                    lbl.setBackground(NAV_SELECTED); lbl.setForeground(ACCENT);
-                } else {
-                    lbl.setBackground(CELL_BG); lbl.setForeground(TEXT);
-                }
+            @Override public Component getListCellRendererComponent(JList<? extends T> list, T value, int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel lbl = new JLabel(value != null ? value.toString() : ""); lbl.setOpaque(true);
+                lbl.setFont(new Font(FONT_FAMILY, Font.PLAIN, 14)); lbl.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+                lbl.setBackground(isSelected ? NAV_SELECTED : CELL_BG); lbl.setForeground(isSelected ? ACCENT : TEXT);
                 return lbl;
             }
         });
@@ -358,183 +311,142 @@ public class FitQuestFrame extends JFrame {
         try {
             double w = Double.parseDouble(weightField.getText().trim());
             double h = Double.parseDouble(heightField.getText().trim());
-            int age = Integer.parseInt(ageField.getText().trim());
+            int parsedAge = Integer.parseInt(ageField.getText().trim());
             Gender g = (Gender) genderBox.getSelectedItem();
             FitnessGoal goal = (FitnessGoal) goalBox.getSelectedItem();
 
-            double bmi = w / ((h / 100.0) * h / 100.0);
-            bmiLiveLabel.setText(String.format("%.1f (身體質量)", bmi));
+            String rawFat = fatField.getText().trim();
+            double fat = rawFat.isEmpty() ? 0.0 : Double.parseDouble(rawFat);
 
-            double bmr = (g == Gender.MALE) ? (10 * w) + (6.25 * h) - (5 * age) + 5 : (10 * w) + (6.25 * h) - (5 * age) - 161;
-            bmrLiveLabel.setText(String.format("%.1f 大卡", bmr));
+            // 虛擬動態載入大腦變數進行預計算
+            PlayerState tempState = new PlayerState("Temp", h, w, g);
+            tempState.setAge(parsedAge);
+            tempState.setBodyFatPercent(fat);
+            tempState.setFitnessGoal(goal);
 
-            double tdee = bmr * 1.375;
-            tdeeLiveLabel.setText(String.format("%.1f 大卡", tdee));
+            bmiLiveLabel.setText(String.format("%.1f (身體質量)", tempState.calculateBMI()));
+            bmrLiveLabel.setText(String.format("%.1f 大卡 (%s)", tempState.calculateBMR(), (fat > 0.0 ? "Katch精準引擎" : "Mifflin引擎")));
+            
+            // 餵入真實歷史日誌發動滾動計算
+            double tdee = tempState.calculateTDEE(workouts);
+            tdeeLiveLabel.setText(String.format("%.1f 大卡 (過去7天滾動活性加權)", tdee));
+            recommendCalLabel.setText(String.format("%.1f 大卡 / 日", tempState.calculateRecommendedCalories(workouts)));
+            muscleLiveLabel.setText(String.format("%.1f kg (全身預估淨肌肉骨骼總重)", tempState.estimateMuscleMass()));
 
-            double recommend = (goal == FitnessGoal.FAT_LOSS) ? (tdee - 400.0) : (tdee + 300.0);
-            recommendCalLabel.setText(String.format("%.1f 大卡 / 日", recommend));
         } catch (Exception ex) {
             String waitStr = "等待合法輸入...";
-            bmiLiveLabel.setText(waitStr); bmrLiveLabel.setText(waitStr); tdeeLiveLabel.setText(waitStr); recommendCalLabel.setText(waitStr);
+            bmiLiveLabel.setText(waitStr); bmrLiveLabel.setText(waitStr); tdeeLiveLabel.setText(waitStr); recommendCalLabel.setText(waitStr); muscleLiveLabel.setText(waitStr);
         }
     }
 
     private void handleProfileSave() {
         String inputName = nameField.getText().trim();
-        String rawAge = ageField.getText().trim();
-        String rawHeight = heightField.getText().trim();
-        String rawWeight = weightField.getText().trim();
-        String rawTarget = targetWeightField.getText().trim();
-        Gender selectedGender = (Gender) genderBox.getSelectedItem();
-        FitnessGoal selectedGoal = (FitnessGoal) goalBox.getSelectedItem();
-
         if (inputName.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "暱稱欄位不能留白！", "輸入錯誤", JOptionPane.ERROR_MESSAGE);
-            return;
+            JOptionPane.showMessageDialog(this, "暱稱欄位不能留白！", "輸入錯誤", JOptionPane.ERROR_MESSAGE); return;
         }
-
         try {
-            int parsedAge = Integer.parseInt(rawAge);
-            double parsedHeight = Double.parseDouble(rawHeight);
-            double parsedWeight = Double.parseDouble(rawWeight);
-            double parsedTarget = Double.parseDouble(rawTarget);
+            int parsedAge = Integer.parseInt(ageField.getText().trim());
+            double parsedHeight = Double.parseDouble(heightField.getText().trim());
+            double parsedWeight = Double.parseDouble(weightField.getText().trim());
+            double parsedTarget = Double.parseDouble(targetWeightField.getText().trim());
+            
+            String rawFat = fatField.getText().trim();
+            double parsedFat = rawFat.isEmpty() ? 0.0 : Double.parseDouble(rawFat);
 
-            if (parsedAge <= 0 || parsedHeight <= 0 || parsedWeight <= 0 || parsedTarget <= 0) {
-                JOptionPane.showMessageDialog(this, "輸入數值必須大於 0！", "數據異常", JOptionPane.ERROR_MESSAGE);
-                return;
+            if (parsedAge <= 0 || parsedHeight <= 0 || parsedWeight <= 0 || parsedTarget <= 0 || parsedFat < 0.0) {
+                JOptionPane.showMessageDialog(this, "數值輸入異常！", "錯誤", JOptionPane.ERROR_MESSAGE); return;
             }
 
             var avatar = player.getAvatar();
             avatar.setName(inputName); 
             avatar.getProfile().setHeight(parsedHeight);
             avatar.getProfile().setWeight(parsedWeight);
-            avatar.getProfile().setGender(selectedGender);
+            avatar.getProfile().setGender((Gender) genderBox.getSelectedItem());
             
             player.setAge(parsedAge);
             player.setTargetWeight(parsedTarget);
-            player.setFitnessGoal(selectedGoal);
+            player.setBodyFatPercent(parsedFat); // 寫入持久化大腦
+            player.setFitnessGoal((FitnessGoal) goalBox.getSelectedItem());
 
             saveAndRefresh();
-            JOptionPane.showMessageDialog(this, "個人特徵、年齡與體態規劃目標已成功同步存檔！", "更新成功", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "科學身體特徵規劃目標已永久同步存檔！", "更新成功", JOptionPane.INFORMATION_MESSAGE);
             showPage("home"); 
-
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "請檢查輸入格式是否全為合法數字！", "格式錯誤", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "請檢查欄位格式！", "格式錯誤", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private JPanel createHomePage() {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(APP_BG);
+        JPanel page = new JPanel(new BorderLayout()); page.setBackground(APP_BG);
+        JPanel content = new JPanel(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(APP_BG); content.setBorder(BorderFactory.createEmptyBorder(6, 18, 18, 18)); 
 
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setBackground(APP_BG);
-        content.setBorder(BorderFactory.createEmptyBorder(6, 18, 18, 18)); 
-
-        JPanel progressHeaderPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        progressHeaderPanel.setOpaque(false);
+        JPanel progressHeaderPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); progressHeaderPanel.setOpaque(false);
         weightProgressLabel = new JLabel("距離目標體重還差：計算中...");
-        weightProgressLabel.setFont(new Font(FONT_FAMILY, Font.BOLD, 15));
-        weightProgressLabel.setForeground(ACCENT);
+        weightProgressLabel.setFont(new Font(FONT_FAMILY, Font.BOLD, 15)); weightProgressLabel.setForeground(ACCENT);
         progressHeaderPanel.add(weightProgressLabel);
 
-        JPanel leftAvatarContainer = new JPanel(new BorderLayout(0, 10));
-        leftAvatarContainer.setOpaque(false);
-        leftAvatarContainer.add(progressHeaderPanel, BorderLayout.NORTH); 
-        leftAvatarContainer.add(avatarPanel, BorderLayout.CENTER);
+        JPanel leftAvatarContainer = new JPanel(new BorderLayout(0, 10)); leftAvatarContainer.setOpaque(false);
+        leftAvatarContainer.add(progressHeaderPanel, BorderLayout.NORTH); leftAvatarContainer.add(avatarPanel, BorderLayout.CENTER);
 
-        JPanel dualPanel = new JPanel(new BorderLayout(18, 0));
-        dualPanel.setOpaque(false);
-        dualPanel.add(leftAvatarContainer, BorderLayout.WEST); 
-        dualPanel.add(createDashboard(), BorderLayout.CENTER); 
+        JPanel dualPanel = new JPanel(new BorderLayout(18, 0)); dualPanel.setOpaque(false);
+        dualPanel.add(leftAvatarContainer, BorderLayout.WEST); dualPanel.add(createDashboard(), BorderLayout.CENTER); 
 
-        content.add(dualPanel);
-        content.add(gap(18));
+        content.add(dualPanel); content.add(gap(18));
 
-        JPanel bottomBtnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
-        bottomBtnRow.setOpaque(false);
-
-        JButton startButton = new JButton("紀錄運動");
-        startButton.setFont(new Font(FONT_FAMILY, Font.BOLD, 20));
-        applySolidButtonStyle(startButton, CTA_BLUE, Color.WHITE);
-        startButton.setBorder(BorderFactory.createEmptyBorder(14, 64, 14, 64));
+        JPanel bottomBtnRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0)); bottomBtnRow.setOpaque(false);
+        JButton startButton = new JButton("紀錄運動"); startButton.setFont(new Font(FONT_FAMILY, Font.BOLD, 20));
+        applySolidButtonStyle(startButton, CTA_BLUE, Color.WHITE); startButton.setBorder(BorderFactory.createEmptyBorder(14, 64, 14, 64));
         startButton.addActionListener(event -> new WorkoutSessionDialog(this).setVisible(true));
         bottomBtnRow.add(startButton);
 
-        JButton clearDataButton = new JButton("重置並清空所有資料");
-        clearDataButton.setFont(new Font(FONT_FAMILY, Font.BOLD, 14));
-        applySolidButtonStyle(clearDataButton, RESET_RED, Color.WHITE);
-        clearDataButton.setBorder(BorderFactory.createEmptyBorder(14, 24, 14, 24));
+        JButton clearDataButton = new JButton("重置並清空所有資料"); clearDataButton.setFont(new Font(FONT_FAMILY, Font.BOLD, 14));
+        applySolidButtonStyle(clearDataButton, RESET_RED, Color.WHITE); clearDataButton.setBorder(BorderFactory.createEmptyBorder(14, 24, 14, 24));
         clearDataButton.addActionListener(event -> performDataPurgeWithConfirmation());
         bottomBtnRow.add(clearDataButton);
 
         content.add(bottomBtnRow);
-
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        JScrollPane scrollPane = new JScrollPane(content); scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setBackground(APP_BG); scrollPane.getViewport().setBackground(APP_BG);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-
         page.add(scrollPane, BorderLayout.CENTER);
         return page;
     }
 
     private JPanel createDashboard() {
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setOpaque(false);
-        content.add(createWorkoutChartSection());
-        content.add(gap(14));
-        content.add(createHistoryPanel());
+        JPanel content = new JPanel(); content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS)); content.setOpaque(false);
+        content.add(createWorkoutChartSection()); content.add(gap(14)); content.add(createHistoryPanel());
         return content;
     }
 
     private JPanel createWorkoutChartSection() {
-        JPanel panel = wideSectionPanel();
-        panel.setLayout(new BorderLayout(0, 12));
-        panel.setPreferredSize(new Dimension(500, 310));
+        JPanel panel = wideSectionPanel(); panel.setLayout(new BorderLayout(0, 12)); panel.setPreferredSize(new Dimension(500, 310));
+        JPanel topHeader = new JPanel(new BorderLayout()); topHeader.setOpaque(false);
+        topHeader.add(sectionTitle("運動紀錄趨勢"), BorderLayout.WEST);
 
-        JPanel topHeader = new JPanel(new BorderLayout());
-        topHeader.setOpaque(false);
-
-        JLabel titleLabel = sectionTitle("運動紀錄趨勢");
-        topHeader.add(titleLabel, BorderLayout.WEST);
-
-        JPanel scaleSelectorRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        scaleSelectorRow.setOpaque(false);
-        addScaleButton(scaleSelectorRow, "WEEK", "週規模");
-        addScaleButton(scaleSelectorRow, "MONTH", "月規模");
-        addScaleButton(scaleSelectorRow, "YEAR", "年規模");
+        JPanel scaleSelectorRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0)); scaleSelectorRow.setOpaque(false);
+        addScaleButton(scaleSelectorRow, "WEEK", "週規模"); addScaleButton(scaleSelectorRow, "MONTH", "月規模"); addScaleButton(scaleSelectorRow, "YEAR", "年規模");
         topHeader.add(scaleSelectorRow, BorderLayout.EAST);
 
-        panel.add(topHeader, BorderLayout.NORTH);
-        panel.add(chartPanel, BorderLayout.CENTER); 
+        panel.add(topHeader, BorderLayout.NORTH); panel.add(chartPanel, BorderLayout.CENTER); 
         return panel;
     }
 
     private void addScaleButton(JPanel container, String scaleKey, String label) {
-        JButton btn = new JButton(label);
-        btn.setFont(new Font(FONT_FAMILY, Font.BOLD, 12)); btn.setFocusPainted(false);
-        applySolidButtonStyle(btn, BUTTON_BG, TEXT);
-        btn.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
-        
+        JButton btn = new JButton(label); btn.setFont(new Font(FONT_FAMILY, Font.BOLD, 12)); btn.setFocusPainted(false);
+        applySolidButtonStyle(btn, BUTTON_BG, TEXT); btn.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
         btn.addActionListener(e -> {
             chartPanel.setScaleMode(scaleKey, workouts); 
             for (Map.Entry<String, JButton> entry : scaleButtons.entrySet()) {
                 boolean isTarget = entry.getKey().equals(scaleKey);
-                entry.getValue().setBackground(isTarget ? NAV_SELECTED : BUTTON_BG);
-                entry.getValue().setForeground(isTarget ? ACCENT : MUTED);
+                entry.getValue().setBackground(isTarget ? NAV_SELECTED : BUTTON_BG); entry.getValue().setForeground(isTarget ? ACCENT : MUTED);
             }
         });
-        scaleButtons.put(scaleKey, btn);
-        container.add(btn);
+        scaleButtons.put(scaleKey, btn); container.add(btn);
     }
 
     private JPanel createHistoryPanel() {
-        JPanel panel = sectionPanel();
-        panel.setLayout(new BorderLayout(0, 10));
-        panel.setPreferredSize(new Dimension(500, 290));
+        JPanel panel = sectionPanel(); panel.setLayout(new BorderLayout(0, 10)); panel.setPreferredSize(new Dimension(500, 290));
         panel.add(sectionTitle("歷史運動紀錄"), BorderLayout.NORTH);
 
         JTable table = new JTable(historyModel);
@@ -546,27 +458,93 @@ public class FitQuestFrame extends JFrame {
             JLabel headerLabel = new JLabel(String.valueOf(value), SwingConstants.LEFT);
             headerLabel.setOpaque(true); headerLabel.setBackground(PANEL_BG); headerLabel.setForeground(TEXT);     
             headerLabel.setFont(new Font(FONT_FAMILY, Font.BOLD, 13));
-            headerLabel.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 1, 1, BORDER),
-                    BorderFactory.createEmptyBorder(6, 8, 6, 8)
-            ));
+            headerLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 1, BORDER), BorderFactory.createEmptyBorder(6, 8, 6, 8)));
             return headerLabel;
         });
 
-        JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER));
-        scrollPane.getViewport().setBackground(CELL_BG);
-        panel.add(scrollPane, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(table); scrollPane.setBorder(BorderFactory.createLineBorder(BORDER));
+        scrollPane.getViewport().setBackground(CELL_BG); panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
     
     private void showPage(String pageName) { pageLayout.show(pageContainer, pageName); }
 
     public void saveAndRefresh() {
-        storage.savePlayer(player);
-        storage.saveWorkouts(workouts);
+        storage.savePlayer(player); storage.saveWorkouts(workouts);
         this.workouts = new ArrayList<>(storage.loadWorkouts()); 
         refreshAll();
+    }
+
+    /**
+     * 【前端全域阻塞通知】高質感暗黑風升級工作台
+     * 使用 Modal 阻塞機制，確保連續升級時，玩家必須點擊「確認」才會依序彈出下一級！
+     */
+    private void triggerBlockingLevelUpDialog(int level) {
+        JDialog dialog = new JDialog(this, "LEVEL UP", JDialog.ModalityType.APPLICATION_MODAL);
+        dialog.setUndecorated(true); dialog.setSize(340, 150); dialog.setLocationRelativeTo(this);
+
+        JPanel panel = new JPanel(new BorderLayout(0, 12));
+        panel.setBackground(PANEL_BG);
+        panel.setBorder(BorderFactory.createLineBorder(new Color(0xeab308), 2)); // 奢華黃金榮譽框
+
+        JLabel textLabel = new JLabel("<html><center><span style='font-size:18px; font-weight:bold; color:#eab308;'>🎉 突破基因鎖 🎉</span><br><br><span style='color:#f4f6fb; font-size:13px;'>您的肉體已成功進化，踏入 <span style='font-size:16px; font-weight:bold; color:#5aa9ff;'>" + level + "</span> 級領域！</span></center></html>", SwingConstants.CENTER);
+        panel.add(textLabel, BorderLayout.CENTER);
+
+        JButton okBtn = new JButton("接受榮耀");
+        okBtn.setFont(new Font(FONT_FAMILY, Font.BOLD, 13));
+        okBtn.setBackground(CELL_BG); okBtn.setForeground(ACCENT);
+        okBtn.setFocusPainted(false); okBtn.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
+        okBtn.addActionListener(e -> dialog.dispose()); // 點擊後釋放當前視窗，才會釋放阻塞讓下一組 Loop 跑進來
+        panel.add(okBtn, BorderLayout.SOUTH);
+
+        dialog.setContentPane(panel); 
+        dialog.setVisible(true); // ➔ 這一行會卡住執行緒，直到玩家關閉它
+    }
+
+    /*
+     * 【前端成就阻塞通知】頂級暗黑科幻風榮譽覺醒工作台
+     * 專門解決多成就連發被吞掉的 Bug，利用 Modal 鎖定執行緒，讓成就依序連彈！
+     */
+    private void triggerBlockingAchievementDialog(String title, String description, String difficulty) {
+        JDialog dialog = new JDialog(this, "ACHIEVEMENT UNLOCKED", JDialog.ModalityType.APPLICATION_MODAL);
+        dialog.setUndecorated(true); 
+        
+        // 🛠️【優化點 1】將視窗高度從 160 微調至 190，徹底撐開文字防禦線
+        dialog.setSize(380, 190); 
+        dialog.setLocationRelativeTo(this);
+
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.setBackground(PANEL_BG);
+        
+        Color borderMutedGold = new Color(0xd4af37);
+        panel.setBorder(BorderFactory.createLineBorder(borderMutedGold, 2)); 
+
+        JLabel headLabel = new JLabel(" ⚔  榮 譽 成 就 覺 醒  ⚔", SwingConstants.CENTER);
+        headLabel.setFont(new Font(FONT_FAMILY, Font.BOLD, 14));
+        headLabel.setForeground(borderMutedGold);
+        headLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0)); // 給予頂部舒適外邊距
+        panel.add(headLabel, BorderLayout.NORTH);
+
+        // 🛠️【優化點 2】剔除粗暴的 <br><br>，改用精準的 CSS margin 行高微操，確保字型永不被截斷
+        JLabel textLabel = new JLabel("<html><center>"
+            + "<div style='margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #ffffff;'>【" + title + "】</div>"
+            + "<div style='margin-bottom: 6px; color: #b7c0d1; font-size: 12px;'>" + description + "</div>"
+            + "<div style='color: #ef4444; font-size: 11px; font-weight: bold;'>[" + difficulty + " 挑戰成功]</div>"
+            + "</center></html>", SwingConstants.CENTER);
+        
+        // 🛠️ 稍微縮減文字區塊的上下 Padding，把像素完美留給字體本身
+        textLabel.setBorder(BorderFactory.createEmptyBorder(4, 16, 4, 16));
+        panel.add(textLabel, BorderLayout.CENTER);
+
+        JButton okBtn = new JButton("將榮耀刻入牆面");
+        okBtn.setFont(new Font(FONT_FAMILY, Font.BOLD, 12));
+        okBtn.setBackground(CELL_BG); okBtn.setForeground(ACCENT);
+        okBtn.setFocusPainted(false); okBtn.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
+        okBtn.addActionListener(e -> dialog.dispose());
+        panel.add(okBtn, BorderLayout.SOUTH);
+
+        dialog.setContentPane(panel); 
+        dialog.setVisible(true); 
     }
 
     private int lastKnownLevel = -1; 
@@ -575,38 +553,30 @@ public class FitQuestFrame extends JFrame {
         if (scaleButtons.containsKey("WEEK") && scaleButtons.get("WEEK").getBackground().equals(BUTTON_BG)) {
             scaleButtons.get("WEEK").doClick();
         }
-        
+
         int currentLevel = player.level();
         if (lastKnownLevel == -1) {
             lastKnownLevel = currentLevel; 
         } else if (currentLevel > lastKnownLevel) {
-            lastKnownLevel = currentLevel;
-            
-            JOptionPane.showMessageDialog(this,
-                    "恭喜您突破基因鎖！等級提升至 Lv." + currentLevel + " \n系統已為您全面重組肌肉上限、並演進基礎能力指標！",
-                    "FITQUEST 等級突破通知",
-                    JOptionPane.INFORMATION_MESSAGE);
+            int levelsGained = currentLevel - lastKnownLevel;
+            int startLevel = lastKnownLevel;
+            lastKnownLevel = currentLevel; // 先行同步防線
+
+            // 依序串聯彈窗：利用 JDialog 的 APPLICATION_MODAL 特性，點完一級才會跳出下一級！
+            for (int i = 1; i <= levelsGained; i++) {
+                triggerBlockingLevelUpDialog(startLevel + i);
+            }
         }
 
-        List<fithero.model.achievement.Achievement> newlyUnlocked = player.triggerAchievementCheck();
-        
-        if (newlyUnlocked != null && !newlyUnlocked.isEmpty()) {
-            for (fithero.model.achievement.Achievement ach : newlyUnlocked) {
-                String unlockMessage = "榮譽解鎖：【" + ach.getTitle() + "】\n"
-                                    + "難度級別：[" + ach.getDifficulty() + "]\n"
-                                    + "達成條件：" + ach.getDescription();
-                
-                JOptionPane.showMessageDialog(this,
-                        unlockMessage,
-                        "🏆 FITQUEST 榮譽成就達成",
-                        JOptionPane.INFORMATION_MESSAGE);
-            }
-            
-            if (achievementWallPage != null) {
-                pageContainer.remove(achievementWallPage);
-                achievementWallPage = new AchievementWallPage(this.player);
-                pageContainer.add(achievementWallPage, "analytics");
-                pageContainer.revalidate();
+        List<Achievement> newUnlocks = player.triggerAchievementCheck();
+        if (newUnlocks != null && !newUnlocks.isEmpty()) {
+            // 利用阻塞特性，依序將本次打卡噴出的所有成就一個個彈給使用者看
+            for (Achievement ach : newUnlocks) {
+                triggerBlockingAchievementDialog(
+                    ach.getTitle(), 
+                    ach.getDescription(), 
+                    ach.getDifficulty()
+                );
             }
         }
 
@@ -614,10 +584,7 @@ public class FitQuestFrame extends JFrame {
         
         String activeScale = "WEEK";
         for (Map.Entry<String, JButton> entry : scaleButtons.entrySet()) {
-            if (entry.getValue().getBackground().equals(NAV_SELECTED)) {
-                activeScale = entry.getKey();
-                break;
-            }
+            if (entry.getValue().getBackground().equals(NAV_SELECTED)) { activeScale = entry.getKey(); break; }
         }
         chartPanel.setScaleMode(activeScale, workouts);
         refreshHistory();
@@ -632,6 +599,7 @@ public class FitQuestFrame extends JFrame {
             ageField.setText(String.valueOf(player.getAge())); 
             heightField.setText(String.valueOf(prof.getHeight()));
             weightField.setText(String.valueOf(prof.getWeight()));
+            fatField.setText(player.getBodyFatPercent() > 0.0 ? String.valueOf(player.getBodyFatPercent()) : ""); // 體脂還原
             targetWeightField.setText(String.valueOf(player.getTargetWeight()));
             genderBox.setSelectedItem(prof.getGender());
             goalBox.setSelectedItem(player.getFitnessGoal()); 
@@ -641,53 +609,30 @@ public class FitQuestFrame extends JFrame {
 
     private void refreshHistory() {
         historyModel.setRowCount(0); 
-        workouts.stream()
-                .sorted(Comparator.comparing(WorkoutEntry::time).reversed())
-                .limit(30) 
-                .forEach(entry -> {
-                    String name = entry.getExerciseName(); 
-                    var exInfo = ExerciseRegistry.getExercise(name);
-                    String amountDisplay = ""; String setsDisplay = "";
-
-                    if (exInfo != null && exInfo.isAerobic()) {
-                        amountDisplay = entry.amount() + " 分鐘"; setsDisplay = "心肺有氧";
-                    } else {
-                        if (entry.weight() == 0) {
-                            amountDisplay = entry.amount() + " 下 (自重)";
-                        } else {
-                            amountDisplay = String.format("%.1f", entry.weight()) + "kg × " + entry.amount() + "下";
-                        }
-                        setsDisplay = entry.sets() + " 組";
-                    }
-                    historyModel.addRow(new Object[] { entry.displayTime(), name, amountDisplay, setsDisplay });
-                });
+        workouts.stream().sorted(Comparator.comparing(WorkoutEntry::time).reversed()).limit(30).forEach(entry -> {
+            String name = entry.getExerciseName(); var exInfo = ExerciseRegistry.getExercise(name);
+            String amountDisplay = ""; String setsDisplay = "";
+            if (exInfo != null && exInfo.isAerobic()) {
+                amountDisplay = entry.amount() + " 分鐘"; setsDisplay = "心肺有氧";
+            } else {
+                amountDisplay = entry.weight() == 0 ? entry.amount() + " 下 (自重)" : String.format("%.1f", entry.weight()) + "kg × " + entry.amount() + "下";
+                setsDisplay = entry.sets() + " 組";
+            }
+            historyModel.addRow(new Object[] { entry.displayTime(), name, amountDisplay, setsDisplay });
+        });
     }
 
     private void performDataPurgeWithConfirmation() {
-        int choice = JOptionPane.showConfirmDialog(this, 
-                "確定要清空所有測試資料嗎？\n這將重置玩家等級、歸零肌肉量、抹除所有歷史運動紀錄，\n並且【全數鎖定】100 項榮譽成就牆紀錄與行事曆計畫！", 
-                "資料徹底刪除警告", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        
+        int choice = JOptionPane.showConfirmDialog(this, "確定要清空所有測試資料嗎？", "刪除警告", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice == JOptionPane.YES_OPTION) {
             var currentAvatar = player.getAvatar();
-            String currentName = currentAvatar.getName();
-            double h = currentAvatar.getProfile().getHeight();
-            double w = currentAvatar.getProfile().getWeight();
-            var gender = currentAvatar.getProfile().getGender();
-
             this.workouts.clear();
-            
             try {
-                java.nio.file.Path achFile = java.nio.file.Path.of("data", "unlocked_achievements.properties");
-                java.nio.file.Files.deleteIfExists(achFile);
-                java.nio.file.Path planFile = java.nio.file.Path.of("data", "custom_plans.properties");
-                java.nio.file.Files.deleteIfExists(planFile);
-                System.out.println("[沙盒重置中心] 已成功物理抹除硬碟成就與日曆設定檔。");
-            } catch (java.io.IOException ex) {
-                System.err.println("[沙盒重置中心] 刪除存檔失敗: " + ex.getMessage());
-            }
+                java.nio.file.Files.deleteIfExists(java.nio.file.Path.of("data", "unlocked_achievements.properties"));
+                java.nio.file.Files.deleteIfExists(java.nio.file.Path.of("data", "custom_plans.properties"));
+            } catch (Exception ignored) {}
 
-            this.player = new PlayerState(currentName, h, w, gender);
+            this.player = new PlayerState(currentAvatar.getName(), currentAvatar.getProfile().getHeight(), currentAvatar.getProfile().getWeight(), currentAvatar.getProfile().getGender());
             this.lastKnownLevel = 1; 
 
             if (achievementWallPage != null) pageContainer.remove(achievementWallPage);
@@ -696,15 +641,9 @@ public class FitQuestFrame extends JFrame {
             this.achievementWallPage = new AchievementWallPage(this.player);
             this.calendarPage = new CalendarPage(this, this.workouts);
 
-            pageContainer.add(achievementWallPage, "analytics");
-            pageContainer.add(calendarPage, "calendar");
-            
-            pageContainer.revalidate();
-            pageContainer.repaint();
-            
+            pageContainer.add(achievementWallPage, "analytics"); pageContainer.add(calendarPage, "calendar");
+            pageContainer.revalidate(); pageContainer.repaint();
             saveAndRefresh();
-            
-            JOptionPane.showMessageDialog(this, "測試沙盒、行事曆與 100 項成就紀錄已成功清空並徹底重置！", "重置成功", JOptionPane.INFORMATION_MESSAGE);
             showPage("home"); 
         }
     }
@@ -712,20 +651,17 @@ public class FitQuestFrame extends JFrame {
     private JPanel sectionPanel() {
         JPanel panel = new JPanel(); panel.setBackground(PANEL_BG);
         panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(16, 16, 16, 16)));
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         return panel;
     }
 
     private JPanel wideSectionPanel() {
         JPanel panel = new JPanel(); panel.setBackground(PANEL_BG);
         panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(18, 18, 18, 18)));
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         return panel;
     }
 
     private JLabel sectionTitle(String text) {
-        label = new JLabel(text);
-        label.setFont(new Font(FONT_FAMILY, Font.BOLD, 18)); label.setForeground(TEXT);
+        label = new JLabel(text); label.setFont(new Font(FONT_FAMILY, Font.BOLD, 18)); label.setForeground(TEXT);
         return label;
     }
     private JLabel label; 
@@ -736,30 +672,4 @@ public class FitQuestFrame extends JFrame {
     }
 
     private Component gap(int height) { return Box.createRigidArea(new Dimension(1, height)); }
-    private JPanel createPlaceholderPage(String title, String body) {
-        JPanel page = new JPanel(new BorderLayout()); page.setBackground(APP_BG);
-        page.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
-        JPanel panel = sectionPanel(); panel.setLayout(new BorderLayout(0, 12));
-        JLabel titleLabel = sectionTitle(title);
-        JLabel bodyLabel = new JLabel(body, SwingConstants.CENTER);
-        bodyLabel.setFont(new Font(FONT_FAMILY, Font.PLAIN, 22)); bodyLabel.setForeground(MUTED);
-        panel.add(titleLabel, BorderLayout.NORTH); panel.add(bodyLabel, BorderLayout.CENTER);
-        page.add(panel, BorderLayout.CENTER);
-        return page;
-    }
-
-    private JLabel createReportBlock(JPanel parent, String title) {
-        JPanel sub = new JPanel(new BorderLayout()); 
-        sub.setOpaque(false);
-        JLabel titleL = new JLabel(title); 
-        titleL.setFont(new Font(FONT_FAMILY, Font.BOLD, 12)); 
-        titleL.setForeground(MUTED);
-        JLabel valL = new JLabel("0.0", SwingConstants.LEFT); 
-        valL.setFont(new Font(FONT_FAMILY, Font.BOLD, 18)); 
-        valL.setForeground(ACCENT);
-        sub.add(titleL, BorderLayout.NORTH); 
-        sub.add(valL, BorderLayout.CENTER);
-        parent.add(sub);
-        return valL;
-    }
 }

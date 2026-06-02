@@ -1,5 +1,17 @@
 package fithero.logic.manager;
 
+import java.awt.Window;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
+import javax.swing.SwingUtilities;
+import javax.swing.JDialog;
+import javax.swing.JPanel;
+import javax.swing.JLabel;
+import javax.swing.JButton;
+import javax.swing.BorderFactory;
+import javax.swing.SwingConstants;
+
 import fithero.model.player.Avatar;
 import fithero.model.player.Gender;
 import fithero.model.exercise.MuscleGroup;
@@ -23,6 +35,7 @@ public class PlayerState {
     
     private double targetWeight;
     private int age = 25; 
+    private double bodyFatPercent = 0.0;
     private FitnessGoal fitnessGoal = FitnessGoal.FAT_LOSS; 
 
     public PlayerState(String name, double height, double weight, Gender gender) {
@@ -41,6 +54,8 @@ public class PlayerState {
     public void setTargetWeight(double targetWeight) { this.targetWeight = targetWeight; }
     public int getAge() { return age; }
     public void setAge(int age) { this.age = age; }
+    public double getBodyFatPercent() { return bodyFatPercent; }
+    public void setBodyFatPercent(double bodyFatPercent) { this.bodyFatPercent = bodyFatPercent; }
     public FitnessGoal getFitnessGoal() { return fitnessGoal; }
     public void setFitnessGoal(FitnessGoal fitnessGoal) { this.fitnessGoal = fitnessGoal; }
 
@@ -58,26 +73,110 @@ public class PlayerState {
         return w / (hMeters * hMeters);
     }
 
+    /**
+     * BMR 雙引擎自動分流演算法
+     */
     public double calculateBMR() {
         double w = avatar.getProfile().getWeight();
         double h = avatar.getProfile().getHeight();
         Gender g = avatar.getProfile().getGender();
-        return (g == Gender.MALE) ? (10 * w) + (6.25 * h) - (5 * age) + 5 
-                                  : (10 * w) + (6.25 * h) - (5 * age) - 161;
+
+        if (bodyFatPercent > 0.0) {
+            // 引擎 A：Katch-McArdle 公式 (精準肌肉代謝模型)
+            double ffm = w * (1.0 - (bodyFatPercent / 100.0)); // 計算除脂體重
+            return 370.0 + (21.6 * ffm);
+        } else {
+            // 引擎 B：Mifflin-St. Jeor 公式 (大眾體型保底模型)
+            if (g == Gender.MALE) {
+                return (10 * w) + (6.25 * h) - (5 * age) + 5;
+            } else {
+                return (10 * w) + (6.25 * h) - (5 * age) - 161;
+            }
+        }
     }
 
-    public double calculateTDEE() {
-        return calculateBMR() * 1.375;
+    /**
+     * 動態智慧行事曆活動量 TDEE 演算法 (滾動 7 天比對)
+     */
+    public double calculateTDEE(List<WorkoutEntry> fullHistory) {
+        double bmr = calculateBMR();
+        double activityMultiplier = 1.2; 
+        
+        if (fullHistory == null || fullHistory.isEmpty()) {
+            return bmr * activityMultiplier;
+        }
+
+        LocalDate sevenDaysAgo = LocalDate.now().minusDays(7);
+        double currentMuscle = estimateMuscleMass(); // 提取肌肉量
+        fithero.model.player.Gender gender = avatar.getProfile().getGender(); // 提取性別
+
+        for (WorkoutEntry entry : fullHistory) {
+            LocalDate workoutDate = entry.time().toLocalDate();
+            if (workoutDate.isAfter(sevenDaysAgo) || workoutDate.isEqual(sevenDaysAgo)) {
+                ExerciseInfo info = ExerciseRegistry.getExercise(entry.getExerciseName());
+                if (info != null) {
+                    if (info.isAerobic()) {
+                        activityMultiplier += 0.05; 
+                    } else {
+                        // 餵入 AII 強度所需之完整 6 大參數
+                        int intensity = ExpCalculator.calculateResistanceIntensity(
+                                info, entry.weight(), avatar.getProfile().getWeight(), gender, this.age, currentMuscle);
+                        activityMultiplier += (intensity * 0.015); 
+                    }
+                }
+            }
+        }
+
+        if (activityMultiplier > 1.95) activityMultiplier = 1.95;
+        return bmr * activityMultiplier;
     }
 
-    public double calculateRecommendedCalories() {
-        double tdee = calculateTDEE();
+    /**
+     * 精密度估算全身真實肌肉量 (Muscle Mass) 幾何模型
+     */
+    public double estimateMuscleMass() {
+        double w = avatar.getProfile().getWeight();
+        Gender g = avatar.getProfile().getGender();
+        
+        // 1. 取得體脂率 (若無則依醫學 WHO 算式逆向反推)
+        double fatPercent = this.bodyFatPercent;
+        if (fatPercent <= 0.0) {
+            // 若玩家沒填體脂率，採用醫學 WHO 體型算式由 BMI 與年齡進行二級逆向反推
+            double bmi = calculateBMI();
+            int genderCode = (g == Gender.MALE) ? 1 : 0;
+            fatPercent = (1.20 * bmi) + (0.23 * age) - (10.8 * genderCode) - 5.4;
+            if (fatPercent < 3.0) fatPercent = 3.0; // 生理脫水極限防護線
+        }
+
+        // 2. 計算精準的「除脂體重 (Fat-Free Mass, FFM)」
+        double ffm = w * (1.0 - (fatPercent / 100.0));
+
+        // 3. 採用 Jannsen 骨骼肌質量幾何解析公式
+        // 考量到身高 (H) 與去脂體重對純肌肉的影響
+        double h = avatar.getProfile().getHeight();
+        double genderBonus = (g == Gender.MALE) ? 1.0 : 0.0;
+        
+        // Jannsen 核心算式：(FFM * 0.56) + (身高縮放權重) + 性別加權
+        // 這能完美剔除體內骨骼（約占體重 15%）與內臟器官（約占體重 10%）的重量！
+        double pureSkeletalMuscle = (ffm * 0.53) + (h * 0.02) + (1.2 * genderBonus);
+        
+        // 保底防護線
+        return Math.max(5.0, pureSkeletalMuscle);
+    }
+
+    public double calculateRecommendedCalories(List<WorkoutEntry> fullHistory) {
+        double tdee = calculateTDEE(fullHistory);
         return fitnessGoal == FitnessGoal.FAT_LOSS ? (tdee - 400.0) : (tdee + 300.0);
     }
 
     public int muscleLevel(MuscleGroup muscle) {
         int muscleValue = avatar.getMuscleParts().getOrDefault(muscle, 0);
-        return Math.max(1, 1 + (muscleValue / 15)); 
+        if (muscleValue <= 0) return 1;
+        
+        // 將阻尼加權優化為 0.7，大幅提升新手開局的第一眼體感
+        int calculatedLevel = (int) Math.sqrt(muscleValue * 0.7) + 1;
+        
+        return Math.max(1, calculatedLevel); 
     }
 
     public Map<MuscleGroup, Integer> muscleLevels() {
@@ -111,9 +210,9 @@ public class PlayerState {
         ExerciseInfo info = ExerciseRegistry.getExercise(exerciseName);
         double userWeight = avatar.getProfile().getWeight();
         Gender gender = avatar.getProfile().getGender();
-
+        double currentMuscleMass = estimateMuscleMass();
         double calories = ExpCalculator.calculateResistanceCalories(info, weightLifted, reps, sets, userWeight);
-        int intensity = ExpCalculator.calculateResistanceIntensity(info, weightLifted, userWeight, gender);
+        int intensity = ExpCalculator.calculateResistanceIntensity(info, weightLifted, userWeight, gender, this.age, currentMuscleMass);
         double earnedExp = ExpCalculator.calculateResistanceExp(calories, intensity);
 
         // 【邏輯補齊】檢查並套用三週連擊 1.25 倍加成獎勵
@@ -123,7 +222,7 @@ public class PlayerState {
 
         // 【型別安全重構】直接帶入強型別 Enum 執行成長
         MuscleGroup target = info.getTargetMuscle();
-        int muscleGain = intensity * 2; 
+        int muscleGain = (int) Math.round(intensity * sets * 0.6);
         avatar.trainMuscle(target, muscleGain);
 
         avatar.setCurrentExp(avatar.getCurrentExp() + earnedExp);
@@ -157,12 +256,15 @@ public class PlayerState {
         return true;
     }
 
-    private void checkLevelUp() {
+    public int checkLevelUp() {
+        int levelsGained = 0;
         while (avatar.getCurrentExp() >= avatar.getMaxExp()) {
             avatar.setCurrentExp(avatar.getCurrentExp() - avatar.getMaxExp());
             avatar.setLevel(avatar.getLevel() + 1);
             avatar.setMaxExp(avatar.getMaxExp() * 1.2);
+            levelsGained++;
         }
+        return levelsGained; // 回傳這次升了幾級（例如連升 3 級就回傳 3）
     }
 
     public List<Achievement> triggerAchievementCheck() {

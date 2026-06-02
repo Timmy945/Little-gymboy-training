@@ -12,6 +12,7 @@ public class Avatar {
     private int level;
     private double currentExp;
     private double maxExp;
+    private String currentTitle = "初出茅廬的菜鳥"; // 預設稱號
     
     // 升級：使用 EnumMap 替代原本脆弱的 String Map，確保資料流編譯期安全
     private final Map<MuscleGroup, Integer> muscleParts;
@@ -32,17 +33,15 @@ public class Avatar {
     }
 
     public String getName() { return name; }
-    public void setName(String name) { 
-        this.name = name != null ? name.replace(",", " ") : "新冒險者"; 
-    }
-    
+    public void setName(String name) { this.name = name != null ? name.replace(",", " ") : "新冒險者"; }
+    public String getCurrentTitle() { return currentTitle; }
+    public void setCurrentTitle(String currentTitle) { this.currentTitle = currentTitle; }
     public int getLevel() { return level; }
     public void setLevel(int level) { this.level = level; }
     public double getCurrentExp() { return currentExp; }
     public void setCurrentExp(double currentExp) { this.currentExp = currentExp; }
     public double getMaxExp() { return maxExp; }
     public void setMaxExp(double maxExp) { this.maxExp = maxExp; }
-    
     public Map<MuscleGroup, Integer> getMuscleParts() { return muscleParts; }
     public UserProfile getProfile() { return profile; }
 

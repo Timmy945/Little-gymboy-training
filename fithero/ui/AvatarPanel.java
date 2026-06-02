@@ -176,7 +176,8 @@ public class AvatarPanel extends JPanel {
 
         g.setFont(new Font(FONT_FAMILY, Font.BOLD, 16));
         g.setColor(new Color(0xf4f6fb));
-        g.drawString("使用者暱稱: " + player.getAvatar().getName(), x + 18, y + 30);
+        String titleBadge = player.getAvatar().getCurrentTitle();
+        g.drawString(player.getAvatar().getName() + " 【" + titleBadge + "】", x + 18, y + 30);
 
         String lvText = "等級: Lv." + player.level();
         FontMetrics metrics = g.getFontMetrics();

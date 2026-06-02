@@ -1,10 +1,11 @@
 package fithero;
 
-import fithero.model.player.Gender;
 import fithero.ui.FitQuestFrame;
 import fithero.ui.CalendarPage;
 import fithero.logic.manager.PlayerState;
 import fithero.infra.Storage;
+import fithero.model.player.Gender;
+
 import java.awt.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,26 +13,25 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import javax.sound.sampled.*;
 import javax.swing.*;
 
-/**
- * 應用程式啟動進入點：具備首次開機智慧分流與個人體態註冊系統。
- */
 public class FitQuestApp {
-    // 統一視覺風格色彩 (Color Palette)
     private static final Color APP_BG = new Color(0x1e222b);
     private static final Color PANEL_BG = new Color(0x282c37);
     private static final Color TEXT = new Color(0xf4f6fb);
     private static final Color BORDER = new Color(0x3a4050);
     private static final Color ACCENT = new Color(0x5aa9ff);
-    private static final Color CTA_BLUE = new Color(59, 130, 246); // 移至上方統一管理
+    private static final Color CTA_BLUE = new Color(59, 130, 246);
 
     private static SystemTray tray;
     private static TrayIcon trayIcon;
-    private static LocalDate lastNotifiedDate = null; // 用於防止當天重複通知的擋板
+    private static final Set<String> notifiedSet = new HashSet<>();
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -39,30 +39,21 @@ public class FitQuestApp {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {}
 
-            // 初始化作業系統本機通知托盤
             initSystemTrayNotification();
 
             Path savePath = Path.of("data", "player.properties");
-
-            // 【智慧分流】檢查是否有歷史存檔
             if (Files.exists(savePath)) {
-                System.out.println("[啟動系統] 偵測到現有存檔，直接進入 FitQuest 控制中心。");
                 launchMainFrame();
             } else {
-                System.out.println("[啟動系統] 未偵測到存檔，觸發首次啟動生物特徵註冊機制。");
                 showFirstTimeRegistration();
             }
         });
     }
 
-    /**
-     * 正式啟動遊戲主畫面與核心雷達
-     */
     private static void launchMainFrame() {
         FitQuestFrame mainFrame = new FitQuestFrame();
         mainFrame.setVisible(true);
 
-        // 【智慧連動點】開機啟動時，立即要求日曆分頁執行「昨日偷懶追溯結算與扣分」
         for (Component comp : mainFrame.getContentPane().getComponents()) {
             if (comp instanceof JPanel) {
                 for (Component subComp : ((JPanel) comp).getComponents()) {
@@ -72,37 +63,22 @@ public class FitQuestApp {
                 }
             }
         }
-
-        // 啟動不滅背景雷達（確保 mainFrame 已生成並取得正確的 PlayerState）
         startBackgroundNotificationRadar(mainFrame);
     }
 
-    /**
-     * 初始化作業系統托盤防線
-     */
     private static void initSystemTrayNotification() {
-        if (!SystemTray.isSupported()) {
-            System.out.println("[通知系統] 警告：當前作業系統不支援托盤通知。");
-            return;
-        }
+        if (!SystemTray.isSupported()) return;
         try {
             tray = SystemTray.getSystemTray();
-            // 建立一個透明像素作為托盤圖示（若有專屬 icon 檔案，建議更換為 ImageIO.read）
             Image image = Toolkit.getDefaultToolkit().createImage(new byte[0]);
             trayIcon = new TrayIcon(image, "FitQuest Scientific Radar");
             trayIcon.setImageAutoSize(true);
             tray.add(trayIcon);
-            System.out.println("[通知系統] 本機系統托盤攔截器初始化成功。");
-        } catch (Exception e) {
-            System.err.println("[通知系統] 托盤初始化失敗: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
     }
 
-    /**
-     * 【不滅背景通知雷達】每 30 秒掃描一次硬碟計畫檔，時間到彈出 Windows 本機通知
-     */
     private static void startBackgroundNotificationRadar(FitQuestFrame mainFrame) {
-        Timer timer = new Timer(true); // 宣告為安全守護執行緒 (Daemon Thread)
+        Timer timer = new Timer(true);
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -114,159 +90,190 @@ public class FitQuestApp {
                     planProps.load(reader);
                     
                     LocalDate today = LocalDate.now();
-                    
-                    // 如果今天已經跳過通知了，這天就不再重複讀取與彈窗
-                    if (today.equals(lastNotifiedDate)) return;
+                    int count = Integer.parseInt(planProps.getProperty("plan." + today + ".count", "0"));
 
-                    String isTrain = planProps.getProperty("plan." + today + ".is_train");
-                    String scheduledTime = planProps.getProperty("plan." + today + ".time"); // 格式範例 "16:45"
-                    
-                    if ("true".equals(isTrain) && scheduledTime != null) {
-                        LocalTime nowTime = LocalTime.now();
-                        String currentTimeStr = String.format("%02d:%02d", nowTime.getHour(), nowTime.getMinute());
-                        
-                        // 當電腦本機時鐘與預定提醒時間吻合時
+                    LocalTime nowTime = LocalTime.now();
+                    String currentTimeStr = String.format("%02d:%02d", nowTime.getHour(), nowTime.getMinute());
+
+                    for (int i = 0; i < count; i++) {
+                        String scheduledTime = planProps.getProperty("plan." + today + "." + i + ".time");
+                        String note = planProps.getProperty("plan." + today + "." + i + ".note", "-");
+
                         if (currentTimeStr.equals(scheduledTime)) {
+                            String uniqueKey = today + "@" + scheduledTime + "@" + note;
+                            if (notifiedSet.contains(uniqueKey)) continue;
+
+                            // 【需求 1 修正】拋棄無聲的蜂鳴器，改用 100% 響起之音效流播放 1000Hz 科技警報音
+                            playAlertSound();
+
                             String userName = mainFrame.getPlayerState().getAvatar().getName();
-                            
+                            SwingUtilities.invokeLater(() -> showJuicyToastNotification(userName, note, scheduledTime));
+
                             if (trayIcon != null) {
-                                trayIcon.displayMessage(
-                                    "FitQuest 重力訓練預警",
-                                    userName + "！您今天計畫的鋼鐵肌群破壞時間已到！請立即就位突破基因限制！",
-                                    TrayIcon.MessageType.INFO
-                                );
-                                System.out.println("[發射通知] 成功在作業系統核心彈出備忘提醒。");
-                                lastNotifiedDate = today; // 標記今日已通知
+                                trayIcon.displayMessage("FitQuest 訓練警報", "[" + scheduledTime + "] " + note, TrayIcon.MessageType.INFO);
                             }
+                            notifiedSet.add(uniqueKey);
                         }
                     }
-                } catch (IOException ignored) {}
+                } catch (Exception ignored) {}
             }
-        }, 0, 1000 * 30); // 改為每 30 秒雷達掃描一次，兼顧效能與精準度
+        }, 0, 1000 * 5); 
     }
 
     /**
-     * 建立並顯示首次進入遊戲的個人資料輸入對話框
+     * 【音效引擎升級】模擬現代通訊軟體 (LINE風格) 的清脆雙音節「叮咚」和弦聲
      */
-    private static void showFirstTimeRegistration() {
-        JDialog regDialog = new JDialog((Window) null, "FitQuest 初始基因序列初始化");
-        regDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        regDialog.setSize(450, 480);
-        regDialog.setResizable(false);
-        regDialog.setLocationRelativeTo(null);
+    private static void playAlertSound() {
+        try {
+            // 總共採樣 0.4 秒 (前 0.15 秒第一音節，後 0.25 秒第二音節)
+            int sampleRate = 16000;
+            byte[] buf = new byte[sampleRate * 4 / 10]; 
+            
+            for (int i = 0; i < buf.length; i++) {
+                double time = (double) i / sampleRate;
+                double frequency;
+                double volumeFade = 1.0;
 
-        // 主面板排版
+                if (i < sampleRate * 15 / 100) {
+                    // 第一音節：880Hz (高音 A)，音量中等
+                    frequency = 880.0;
+                    volumeFade = 0.6;
+                } else {
+                    // 第二音節：1318.5Hz (高音 E)，音量較亮，並隨時間線性遞減產生餘音效果
+                    frequency = 1318.51;
+                    double progress = (time - 0.15) / 0.25;
+                    volumeFade = 1.0 - progress; // 漸弱效果
+                }
+
+                double angle = time * frequency * 2.0 * Math.PI;
+                buf[i] = (byte) (Math.sin(angle) * 127.0 * volumeFade);
+            }
+
+            AudioFormat af = new AudioFormat(sampleRate, 8, 1, true, false);
+            SourceDataLine sdl = AudioSystem.getSourceDataLine(af);
+            sdl.open(af); sdl.start();
+            sdl.write(buf, 0, buf.length);
+            sdl.drain(); sdl.close();
+        } catch (Exception ignored) {}
+    }
+
+    private static void showJuicyToastNotification(String user, String note, String time) {
+        JDialog toast = new JDialog((Window) null);
+        toast.setUndecorated(true); toast.setAlwaysOnTop(true); toast.setSize(360, 130);
+        Dimension scr = Toolkit.getDefaultToolkit().getScreenSize();
+        toast.setLocation(scr.width - 380, scr.height - 180);
+
+        JPanel content = new JPanel(new BorderLayout(0, 8));
+        content.setBackground(PANEL_BG); content.setBorder(BorderFactory.createLineBorder(ACCENT, 2));
+
+        JLabel titleL = new JLabel("運動時間到了！ (" + time + ")", SwingConstants.LEFT);
+        titleL.setFont(new Font("Microsoft JhengHei", Font.BOLD, 15)); titleL.setForeground(ACCENT);
+        
+        JLabel msgL = new JLabel("<html>" + user + " 該動起來了！<br> 當前排程：<span style='color:#f4f6fb; font-weight:bold;'>" + note + "</span></html>");
+        msgL.setFont(new Font("Microsoft JhengHei", Font.PLAIN, 13)); msgL.setForeground(TEXT);
+        msgL.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
+
+        JLabel countdownL = new StringCountdownLabel(toast);
+        countdownL.setHorizontalAlignment(SwingConstants.RIGHT); countdownL.setForeground(new Color(0xef4444));
+        countdownL.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 12));
+
+        content.add(titleL, BorderLayout.NORTH); content.add(msgL, BorderLayout.CENTER); content.add(countdownL, BorderLayout.SOUTH);
+        toast.setContentPane(content); toast.setVisible(true);
+    }
+
+    private static class StringCountdownLabel extends JLabel {
+        private int remaining = 10;
+        StringCountdownLabel(JDialog target) {
+            setFont(new Font("Microsoft JhengHei", Font.BOLD, 11));
+            setText("視窗將於 " + remaining + " 秒後自動關閉 ");
+            new javax.swing.Timer(1000, e -> {
+                remaining--;
+                if (remaining <= 0) {
+                    ((javax.swing.Timer)e.getSource()).stop(); target.dispose();
+                } else {
+                    setText("視窗將於 " + remaining + " 秒後自動關閉 ");
+                }
+            }).start();
+        }
+    }
+
+    private static void showFirstTimeRegistration() {
+        JDialog regDialog = new JDialog((Window) null, "帳號註冊");
+        regDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        regDialog.setSize(450, 480); regDialog.setResizable(false); regDialog.setLocationRelativeTo(null);
+
         JPanel mainPanel = new JPanel();
         mainPanel.setBackground(APP_BG);
         mainPanel.setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
 
-        // 歡迎與提示標題
-        JLabel title = new JLabel("初始化你的虛擬火柴人");
-        title.setFont(new Font("Dialog", Font.BOLD, 22));
-        title.setForeground(TEXT);
-        title.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel subtitle = new JLabel("請輸入真實生物特徵，以精準校正科學熱量算式。");
-        subtitle.setFont(new Font("Dialog", Font.PLAIN, 12));
-        subtitle.setForeground(new Color(0xb7c0d1));
-        subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        mainPanel.add(title);
         mainPanel.add(Box.createRigidArea(new Dimension(1, 4)));
-        mainPanel.add(subtitle);
         mainPanel.add(Box.createRigidArea(new Dimension(1, 28)));
 
-        // 輸入表單區域
         JPanel formPanel = new JPanel(new GridLayout(4, 2, 12, 24));
         formPanel.setOpaque(false);
+        formPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 100));
 
-        JTextField nameField = createStyledTextField("基因代號 (姓名)");
+        JTextField nameField = createStyledTextField("請輸入暱稱");
         JTextField heightField = createStyledTextField("175.0");
         JTextField weightField = createStyledTextField("70.0");
-        
         JComboBox<Gender> genderBox = new JComboBox<>(Gender.values());
-        genderBox.setFont(new Font("Dialog", Font.BOLD, 15));
-        genderBox.setBackground(new Color(0x20242d));
-        genderBox.setForeground(TEXT);
+        genderBox.setFont(new Font("Microsoft JhengHei", Font.BOLD, 15));
+        genderBox.setBackground(new Color(0x20242d)); genderBox.setForeground(Color.BLACK);
 
-        formPanel.add(createFormLabel("使用者姓名："));   formPanel.add(nameField);
+        formPanel.add(createFormLabel("角色暱稱："));   formPanel.add(nameField);
         formPanel.add(createFormLabel("身高 (cm)："));   formPanel.add(heightField);
         formPanel.add(createFormLabel("體重 (kg)："));   formPanel.add(weightField);
         formPanel.add(createFormLabel("玩家性別："));    formPanel.add(genderBox);
 
-        mainPanel.add(formPanel);
-        mainPanel.add(Box.createRigidArea(new Dimension(1, 32)));
+        mainPanel.add(formPanel); mainPanel.add(Box.createRigidArea(new Dimension(1, 32)));
 
-        // 確認送出按鈕
-        JButton submitBtn = new JButton("建構人偶並踏入領域");
-        submitBtn.setFont(new Font("Dialog", Font.BOLD, 16));
-        submitBtn.setForeground(Color.WHITE);
-        submitBtn.setBackground(CTA_BLUE);
-        submitBtn.setOpaque(true);
-        submitBtn.setContentAreaFilled(true);
-        submitBtn.setBorderPainted(false);
-        submitBtn.setFocusPainted(false);
+        JButton submitBtn = new JButton("建構人偶並開始遊戲");
+        submitBtn.setFont(new Font("Microsoft JhengHei", Font.BOLD, 16));
+        submitBtn.setForeground(Color.WHITE); submitBtn.setBackground(CTA_BLUE);
+        submitBtn.setOpaque(true); submitBtn.setContentAreaFilled(true); submitBtn.setBorderPainted(false); submitBtn.setFocusPainted(false);
         submitBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         submitBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
         
         submitBtn.addActionListener(event -> {
             String name = nameField.getText().trim();
-            if (name.isEmpty() || name.equals("基因代號 (姓名)")) {
-                JOptionPane.showMessageDialog(regDialog, "請輸入有效的玩家姓名代號！", "序列錯誤", JOptionPane.WARNING_MESSAGE);
+            if (name.isEmpty() || name.equals("請輸入暱稱")) {
+                JOptionPane.showMessageDialog(regDialog, "請輸入有效的角色暱稱！", "序列錯誤", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-
             try {
                 double height = Double.parseDouble(heightField.getText());
                 double weight = Double.parseDouble(weightField.getText());
                 Gender gender = (Gender) genderBox.getSelectedItem();
 
-                // 創建並儲存第一份玩家資料
                 PlayerState firstPlayer = new PlayerState(name, height, weight, gender);
-                
-                // 自動建立 data 資料夾（避免目錄不存在導致 IOException）
                 Path dataDir = Path.of("data");
-                if (!Files.exists(dataDir)) {
-                    Files.createDirectories(dataDir);
-                }
+                if (!Files.exists(dataDir)) Files.createDirectories(dataDir);
                 
                 Storage initialStorage = new Storage(dataDir);
                 initialStorage.savePlayer(firstPlayer);
 
-                // 關閉輸入框並呼叫主畫面啟動方法
                 regDialog.dispose();
                 launchMainFrame();
-
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(regDialog, "身高與體重必須輸入正確的數字（可帶小數點）！", "數據校正錯誤", JOptionPane.ERROR_MESSAGE);
-            } catch (IOException ex) {
-                JOptionPane.showMessageDialog(regDialog, "無法建立存檔目錄: " + ex.getMessage(), "系統錯誤", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(regDialog, "輸入數據校正錯誤！", "錯誤", JOptionPane.ERROR_MESSAGE);
             }
         });
 
-        mainPanel.add(submitBtn);
-        regDialog.setContentPane(mainPanel);
-        regDialog.setVisible(true);
+        mainPanel.add(submitBtn); regDialog.setContentPane(mainPanel); regDialog.setVisible(true);
     }
 
     private static JLabel createFormLabel(String text) {
         JLabel label = new JLabel(text, SwingConstants.RIGHT);
-        label.setFont(new Font("Dialog", Font.BOLD, 15));
-        label.setForeground(TEXT);
+        label.setFont(new Font("Microsoft JhengHei", Font.BOLD, 15)); label.setForeground(TEXT);
         return label;
     }
 
     private static JTextField createStyledTextField(String defaultText) {
         JTextField field = new JTextField(defaultText);
-        field.setFont(new Font("Dialog", Font.PLAIN, 15));
-        field.setForeground(TEXT);
-        field.setBackground(new Color(0x20242d));
-        field.setCaretColor(TEXT);
-        field.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER),
-                BorderFactory.createEmptyBorder(8, 10, 8, 10)
-        ));
+        field.setFont(new Font("Microsoft JhengHei", Font.PLAIN, 15));
+        field.setForeground(TEXT); field.setBackground(new Color(0x20242d)); field.setCaretColor(TEXT);
+        field.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER), BorderFactory.createEmptyBorder(8, 10, 8, 10)));
         return field;
     }
 }

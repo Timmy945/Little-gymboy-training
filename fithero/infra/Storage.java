@@ -54,13 +54,14 @@ public class Storage {
             // 還原最新升級擴充的科學核心特徵
             playerState.setAge(parseInt(properties.getProperty("profile.age"), 25));
             playerState.setTargetWeight(parseDouble(properties.getProperty("profile.targetWeight"), weight));
+            playerState.setBodyFatPercent(parseDouble(properties.getProperty("profile.bodyFatPercent"), 0.0));
             playerState.setFitnessGoal(FitnessGoal.valueOf(properties.getProperty("profile.fitnessGoal", "FAT_LOSS")));
 
             avatar.setLevel(parseInt(properties.getProperty("level"), 1));
             avatar.setCurrentExp(parseDouble(properties.getProperty("xp"), 0.0));
             avatar.setMaxExp(parseDouble(properties.getProperty("maxExp"), 100.0));
 
-            // 🔥【強型別安全重構】利用 Enum 迴圈精準還原後台真實肌肉數據
+            // 【強型別安全重構】利用 Enum 迴圈精準還原後台真實肌肉數據
             for (MuscleGroup group : MuscleGroup.values()) {
                 String key = "muscle.raw." + group.name();
                 int rawValue = parseInt(properties.getProperty(key), 0);
@@ -92,6 +93,7 @@ public class Storage {
             properties.setProperty("profile.gender", avatar.getProfile().getGender().name());
             properties.setProperty("profile.age", String.valueOf(playerState.getAge()));
             properties.setProperty("profile.targetWeight", String.valueOf(playerState.getTargetWeight()));
+            properties.setProperty("profile.bodyFatPercent", String.valueOf(playerState.getBodyFatPercent()));
             properties.setProperty("profile.fitnessGoal", playerState.getFitnessGoal().name());
 
             // 2. 儲存遊戲核心進度
@@ -99,7 +101,7 @@ public class Storage {
             properties.setProperty("xp", String.valueOf(avatar.getCurrentExp()));
             properties.setProperty("maxExp", String.valueOf(avatar.getMaxExp()));
 
-            // 3. 🔥【強型別安全重構】儲存真正的科學肌肉量 Enum 映射
+            // 3. 【強型別安全重構】儲存真正的科學肌肉量 Enum 映射
             for (Map.Entry<MuscleGroup, Integer> entry : avatar.getMuscleParts().entrySet()) {
                 properties.setProperty("muscle.raw." + entry.getKey().name(), String.valueOf(entry.getValue()));
             }
