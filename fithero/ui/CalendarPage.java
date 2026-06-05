@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -189,6 +190,7 @@ public class CalendarPage extends JPanel {
         Map<LocalDate, List<Color>> markers = new HashMap<>();
         for (WorkoutEntry workout : workouts) {
             LocalDate date = workout.time().toLocalDate();
+            // 向 ExerciseRegistry 要求該運動名稱的詳細科學資料
             ExerciseInfo scienceInfo = ExerciseRegistry.getExercise(workout.getExerciseName());
             Color targetColor = COLOR_AEROBIC; 
             if (scienceInfo != null) {
@@ -333,7 +335,15 @@ public class CalendarPage extends JPanel {
     }
 
     private void showDayWorkoutsDetails(LocalDate date) {
-        List<WorkoutEntry> dayWorkouts = workouts.stream().filter(w -> w.time().toLocalDate().equals(date)).collect(Collectors.toList());
+        List<WorkoutEntry> dayWorkouts = workouts.stream()
+            .filter(w -> {
+                // 將時間強制轉換為電腦當前的本地時區，再切出日期
+                LocalDate workoutDate = w.time()
+                                        .atZone(ZoneId.systemDefault())
+                                        .toLocalDate();
+                return workoutDate.equals(date);
+            })
+            .collect(Collectors.toList());
         DateTimeFormatter titlePattern = DateTimeFormatter.ofPattern("dd MMMM EEEE", Locale.ENGLISH);
 
         JDialog detailDialog = new JDialog(owner, titlePattern.format(date), JDialog.ModalityType.APPLICATION_MODAL);
