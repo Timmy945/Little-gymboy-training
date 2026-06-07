@@ -31,7 +31,7 @@ public class Storage {
     }
 
     /**
-     * 讀取玩家資料（含多執行緒同步鎖，防止背景雷達衝突）
+     * 讀取玩家資料
      */
     public synchronized PlayerState loadPlayer() {
         if (!Files.exists(playerFile)) {
@@ -60,8 +60,11 @@ public class Storage {
             avatar.setLevel(parseInt(properties.getProperty("level"), 1));
             avatar.setCurrentExp(parseDouble(properties.getProperty("xp"), 0.0));
             avatar.setMaxExp(parseDouble(properties.getProperty("maxExp"), 100.0));
+            
+            // 🛠️【持久化修復】還原玩家更換配戴的成就榮譽稱號
+            avatar.setCurrentTitle(properties.getProperty("profile.title", "無名鍛鍊者"));
 
-            // 【強型別安全重構】利用 Enum 迴圈精準還原後台真實肌肉數據
+            // 利用 Enum 迴圈精準還原後台真實肌肉數據
             for (MuscleGroup group : MuscleGroup.values()) {
                 String key = "muscle.raw." + group.name();
                 int rawValue = parseInt(properties.getProperty(key), 0);
@@ -78,7 +81,7 @@ public class Storage {
     }
 
     /**
-     * 儲存玩家資料（含多執行緒同步鎖，防止寫入時遭受背景執行緒讀取破壞）
+     * 儲存玩家資料
      */
     public synchronized void savePlayer(PlayerState playerState) {
         try {
@@ -95,13 +98,16 @@ public class Storage {
             properties.setProperty("profile.targetWeight", String.valueOf(playerState.getTargetWeight()));
             properties.setProperty("profile.bodyFatPercent", String.valueOf(playerState.getBodyFatPercent()));
             properties.setProperty("profile.fitnessGoal", playerState.getFitnessGoal().name());
+            
+            // 🛠️【持久化修復】將玩家最新配戴的稱號永久烙印進存檔中
+            properties.setProperty("profile.title", avatar.getCurrentTitle());
 
             // 2. 儲存遊戲核心進度
             properties.setProperty("level", String.valueOf(avatar.getLevel()));
             properties.setProperty("xp", String.valueOf(avatar.getCurrentExp()));
             properties.setProperty("maxExp", String.valueOf(avatar.getMaxExp()));
 
-            // 3. 【強型別安全重構】儲存真正的科學肌肉量 Enum 映射
+            // 3. 儲存真正的科學肌肉量 Enum 映射
             for (Map.Entry<MuscleGroup, Integer> entry : avatar.getMuscleParts().entrySet()) {
                 properties.setProperty("muscle.raw." + entry.getKey().name(), String.valueOf(entry.getValue()));
             }
@@ -118,7 +124,6 @@ public class Storage {
     public synchronized List<WorkoutEntry> loadWorkouts() {
         List<WorkoutEntry> workouts = new ArrayList<>();
         if (!Files.exists(workoutsFile)) return workouts;
-
         try {
             for (String line : Files.readAllLines(workoutsFile, StandardCharsets.UTF_8)) {
                 if (!line.isBlank()) {

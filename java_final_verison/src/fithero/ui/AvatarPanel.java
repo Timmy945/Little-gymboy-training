@@ -10,6 +10,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -25,7 +26,7 @@ import java.nio.file.Paths;
 import java.util.stream.Stream;
 
 /**
- * 角色成長畫布：融合 2D 正反雙面肌肉動態四階級縮放、部位等級卡與角色經驗卡
+ * 角色成長畫布：融合 2D 正反雙面肌肉動態四階級縮放、部位等級卡與角色經驗卡 (完全體合流版)
  */
 public class AvatarPanel extends JPanel {
     private PlayerState player;
@@ -58,18 +59,13 @@ public class AvatarPanel extends JPanel {
         }
     }
 
-    // 🧠【動態四階級生理模型】
+    // 🧠【動態四階級生理模型 - 完全體合流】
     private class LevelMetaData {
         int fileLevel;     // 實體對應圖檔 lv1 ~ lv4
         double scaleBonus; // 階級內微幅線條膨脹放大率
 
-        LevelMetaData(int rawLevel, boolean musclePart) {
-            if (musclePart) {
-                this.fileLevel = Math.max(1, Math.min(4, rawLevel));
-                this.scaleBonus = 1.0;
-                return;
-            }
-
+        LevelMetaData(int rawLevel) {
+            // 徹底解鎖肌肉與身體的限制，讓所有部位在區間內都能展現線性膨脹的視覺震撼
             if (rawLevel <= 10) {
                 this.fileLevel = 1;
                 this.scaleBonus = 1.0 + (Math.max(1, rawLevel) - 1) * 0.015; 
@@ -98,7 +94,6 @@ public class AvatarPanel extends JPanel {
         setPreferredSize(new Dimension(610, 700));
         setBackground(new Color(0x282c37));
 
-        // 🛠️ 採用多級路徑自動適配探测器，確保不論在 IDE 還是編譯後的 jar 都能咬合資產
         Path rootOpt1 = Paths.get("assets").toAbsolutePath();
         Path rootOpt2 = Paths.get("..", "assets").toAbsolutePath();
         if (Files.isDirectory(rootOpt1)) {
@@ -106,7 +101,7 @@ public class AvatarPanel extends JPanel {
         } else if (Files.isDirectory(rootOpt2)) {
             this.assetRoot = rootOpt2;
         } else {
-            this.assetRoot = rootOpt1; // 保底預設
+            this.assetRoot = rootOpt1; 
         }
         
         reloadAssetsConfiguration();
@@ -115,7 +110,6 @@ public class AvatarPanel extends JPanel {
     public void reloadAssetsConfiguration() {
         try {
             if (Files.isDirectory(assetRoot)) {
-                // 擴大資產包可用性查核線：只要有 body 或 head 存在即視為綠燈可用
                 assetsAvailable = Files.exists(assetRoot.resolve("body/lv1_body.png")) || 
                                   Files.exists(assetRoot.resolve("head/head.png"));
             } else {
@@ -159,7 +153,6 @@ public class AvatarPanel extends JPanel {
         BufferedImage frontImg = composeFrontAvatar();
         BufferedImage backImg = composeBackAvatar();
 
-        // 角色是首頁主視覺；此處控制正反面角色可用空間。
         int availableWidth = getWidth() - 48; 
         int availableHeight = getHeight() - 250;  
         int combinedWidth = frontImg.getWidth() + backImg.getWidth();
@@ -240,7 +233,7 @@ public class AvatarPanel extends JPanel {
     }
 
     private void drawPart(Graphics2D g, AvatarPart part, int rawLevel, String side, int x, int y) {
-        LevelMetaData meta = levelMeta(part, rawLevel);
+        LevelMetaData meta = new LevelMetaData(rawLevel); // 🛠️ 移去錯位的布林判斷，全面啟用四階縮放數據
         BufferedImage img = readFrontPartWithFallback(part, meta.fileLevel, side);
         if (img == null || img.getWidth() <= 1) return; 
 
@@ -254,16 +247,14 @@ public class AvatarPanel extends JPanel {
     }
 
     private void drawBackPart(Graphics2D g, AvatarPart part, int rawLevel, String side, int x, int y) {
-        LevelMetaData meta = levelMeta(part, rawLevel);
+        LevelMetaData meta = new LevelMetaData(rawLevel);
 
         if (usesSharedFrontAsset(part, meta.fileLevel)) {
             drawPart(g, part, rawLevel, side, x, y);
             return;
         }
         
-        // 背面四肢素材採用全小寫部位名稱，例如 lv2_back_leftleg.png。
         String lowerPartName = part.name().toLowerCase();
-
         String backName = (side != null) 
             ? "lv" + meta.fileLevel + "_back_" + side + lowerPartName + ".png" 
             : "lv" + meta.fileLevel + "_back_" + part.fileName + ".png";
@@ -278,7 +269,6 @@ public class AvatarPanel extends JPanel {
             return; 
         }
         
-        // 沒有專用背面素材時，共用正面素材。
         drawPart(g, part, rawLevel, side, x, y);
     }
 
@@ -290,11 +280,11 @@ public class AvatarPanel extends JPanel {
     }
 
     private int muscleAssetLevel(int muscleLevel) {
-        return Math.max(1, Math.min(4, muscleLevel));
-    }
-
-    private LevelMetaData levelMeta(AvatarPart part, int level) {
-        return new LevelMetaData(level, part != AvatarPart.BODY);
+        // 🛠️ 將原先粗暴的 [1~4] 裁剪演算法優化升級為階級轉換對應，確保物理骨骼位移步長 (Offset) 與圖片資源完全同步
+        if (muscleLevel <= 10) return 1;
+        if (muscleLevel <= 25) return 2;
+        if (muscleLevel <= 50) return 3;
+        return 4;
     }
 
     private BufferedImage readFrontPartWithFallback(AvatarPart part, int requestedLevel, String side) {
@@ -409,16 +399,13 @@ public class AvatarPanel extends JPanel {
         g.drawString(pStr, barX + (barWidth - g.getFontMetrics().stringWidth(pStr)) / 2, barY + 14);
     }
 
-    // 🛠️【修復點】補上漏掉的極簡火柴人降級回調繪製核心，斬殺 1 error 編譯警報
     private void drawFallbackStickman(Graphics2D g, int x, int y) {
         g.setColor(new Color(0xdde4f0)); 
         g.setStroke(new BasicStroke(5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        
-        // 畫骨骼線條
-        g.draw(new Ellipse2D.Double(x - 34, y, 68, 68)); // 頭部
-        g.draw(new Line2D.Double(x, y + 68, x, y + 190)); // 軀幹
-        g.draw(new Line2D.Double(x - 60, y + 110, x + 60, y + 110)); // 雙臂
-        g.draw(new Line2D.Double(x, y + 190, x - 40, y + 320)); // 左腿
-        g.draw(new Line2D.Double(x, y + 190, x + 40, y + 320)); // 右腿
+        g.draw(new Ellipse2D.Double(x - 34, y, 68, 68)); 
+        g.draw(new Line2D.Double(x, y + 68, x, y + 190)); 
+        g.draw(new Line2D.Double(x - 60, y + 110, x + 60, y + 110)); 
+        g.draw(new Line2D.Double(x, y + 190, x - 40, y + 320)); 
+        g.draw(new Line2D.Double(x, y + 190, x + 40, y + 320)); 
     }
 }

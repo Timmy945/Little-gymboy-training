@@ -103,7 +103,7 @@ public class FitQuestFrame extends JFrame {
     private JTextField ageField; 
     private JTextField heightField;
     private JTextField weightField;
-    private JTextField fatField; // 全新擴充：體脂率輸入框
+    private JTextField fatField; 
     private JTextField targetWeightField; 
     private JComboBox<Gender> genderBox;
     private JComboBox<FitnessGoal> goalBox; 
@@ -112,7 +112,7 @@ public class FitQuestFrame extends JFrame {
     private JLabel bmrLiveLabel;
     private JLabel tdeeLiveLabel;
     private JLabel recommendCalLabel; 
-    private JLabel muscleLiveLabel; // 全新擴充：預估肌肉量科學標籤
+    private JLabel muscleLiveLabel; 
 
     private final DefaultTableModel historyModel = new DefaultTableModel(
             new String[] {"時間", "訓練項目", "數量/時間", "訓練組數"}, 0
@@ -136,8 +136,6 @@ public class FitQuestFrame extends JFrame {
         this.workouts.addAll(storage.loadWorkouts());
         
         this.avatarPanel = new AvatarPanel(player);
-        this.chartPanel.setDailyTarget(DAILY_TRAINING_VOLUME_TARGET);
-        this.chartPanel.setDailyDangerThreshold(DAILY_TRAINING_DANGER_THRESHOLD);
         this.calendarPage = new CalendarPage(this, workouts);
         this.achievementWallPage = new AchievementWallPage(player);
 
@@ -156,6 +154,10 @@ public class FitQuestFrame extends JFrame {
         add(pageContainer, BorderLayout.CENTER); 
 
         this.calendarPage.runBootUpStreakCheck(player);
+        
+        // 啟動時先行鎖定當前等級快取線，防範初次載入閃窗
+        this.lastKnownLevel = player.level();
+        
         refreshAll(); 
         showPage("home");
         setLocationRelativeTo(null); 
@@ -232,7 +234,6 @@ public class FitQuestFrame extends JFrame {
         gbc.gridx = 1; gbc.weightx = 0.85;
         weightField = new JTextField(); setupInputField(weightField, inputFont); formPanel.add(weightField, gbc);
 
-        // 【優化點 1】新增體脂率輸入欄位
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.15;
         JLabel fatLabel = new JLabel("體脂肪率 (%, 選填)："); fatLabel.setFont(labelFont); fatLabel.setForeground(ACCENT);
         formPanel.add(fatLabel, gbc);
@@ -259,9 +260,8 @@ public class FitQuestFrame extends JFrame {
         goalBox = new JComboBox<>(FitnessGoal.values()); goalBox.setFont(inputFont); setupComboBoxTheme(goalBox);
         goalBox.addActionListener(e -> triggerLiveScientificCalcs()); formPanel.add(goalBox, gbc);
 
-        // 加大科研回報面板
         gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2; gbc.insets = new Insets(10, 15, 5, 15);
-        JPanel calcReportPanel = new JPanel(new GridLayout(3, 2, 15, 8)); // 擴展為 3x2 網格
+        JPanel calcReportPanel = new JPanel(new GridLayout(3, 2, 15, 8)); 
         calcReportPanel.setBackground(CELL_BG);
         calcReportPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER, 1), BorderFactory.createEmptyBorder(10, 14, 10, 14)));
 
@@ -269,8 +269,8 @@ public class FitQuestFrame extends JFrame {
         bmrLiveLabel = createReportBlock(calcReportPanel, "基礎代謝率 (BMR) [雙引擎自適應]");
         tdeeLiveLabel = createReportBlock(calcReportPanel, "每日總熱量消耗 (TDEE) [智慧動態滾動]");
         recommendCalLabel = createReportBlock(calcReportPanel, "每日建議熱量攝取");
-        muscleLiveLabel = createReportBlock(calcReportPanel, "全身預估精準肌肉量 (Muscle Mass)"); // 補上第 5 看板
-        muscleLiveLabel.setForeground(new Color(241, 196, 15)); // 精緻鵝黃金
+        muscleLiveLabel = createReportBlock(calcReportPanel, "全身預估精準肌肉量 (Muscle Mass)"); 
+        muscleLiveLabel.setForeground(new Color(241, 196, 15)); 
 
         formPanel.add(calcReportPanel, gbc);
 
@@ -282,7 +282,7 @@ public class FitQuestFrame extends JFrame {
         ageField.getDocument().addDocumentListener(liveEngine);
         heightField.getDocument().addDocumentListener(liveEngine);
         weightField.getDocument().addDocumentListener(liveEngine);
-        fatField.getDocument().addDocumentListener(liveEngine); // 體脂加入監聽
+        fatField.getDocument().addDocumentListener(liveEngine); 
 
         wrapperPanel.add(formPanel, BorderLayout.CENTER);
 
@@ -335,7 +335,6 @@ public class FitQuestFrame extends JFrame {
             String rawFat = fatField.getText().trim();
             double fat = rawFat.isEmpty() ? 0.0 : Double.parseDouble(rawFat);
 
-            // 虛擬動態載入大腦變數進行預計算
             PlayerState tempState = new PlayerState("Temp", h, w, g);
             tempState.setAge(parsedAge);
             tempState.setBodyFatPercent(fat);
@@ -344,7 +343,6 @@ public class FitQuestFrame extends JFrame {
             bmiLiveLabel.setText(String.format("%.1f (身體質量)", tempState.calculateBMI()));
             bmrLiveLabel.setText(String.format("%.1f 大卡 (%s)", tempState.calculateBMR(), (fat > 0.0 ? "Katch精準引擎" : "Mifflin引擎")));
             
-            // 餵入真實歷史日誌發動滾動計算
             double tdee = tempState.calculateTDEE(workouts);
             tdeeLiveLabel.setText(String.format("%.1f 大卡 (過去7天滾動活性加權)", tdee));
             recommendCalLabel.setText(String.format("%.1f 大卡 / 日", tempState.calculateRecommendedCalories(workouts)));
@@ -382,7 +380,7 @@ public class FitQuestFrame extends JFrame {
             
             player.setAge(parsedAge);
             player.setTargetWeight(parsedTarget);
-            player.setBodyFatPercent(parsedFat); // 寫入持久化大腦
+            player.setBodyFatPercent(parsedFat); 
             player.setFitnessGoal((FitnessGoal) goalBox.getSelectedItem());
 
             saveAndRefresh();
@@ -416,7 +414,6 @@ public class FitQuestFrame extends JFrame {
         return page;
     }
 
-    // 首頁左側：角色是主視覺，體重進度作為次要提示。
     private JPanel buildCharacterPanel() {
         JPanel panel = new JPanel(new BorderLayout(0, 10));
         panel.setOpaque(false);
@@ -464,7 +461,6 @@ public class FitQuestFrame extends JFrame {
 
         panel.add(topHeader, BorderLayout.NORTH);
         panel.add(chartPanel, BorderLayout.CENTER);
-        panel.add(chartPanel.createLegendPanel(), BorderLayout.SOUTH);
         return panel;
     }
 
@@ -589,6 +585,67 @@ public class FitQuestFrame extends JFrame {
         table.setRowHeight(32); table.setBackground(CELL_BG); table.setForeground(TEXT); table.setGridColor(BORDER);
         table.setFont(new Font(FONT_FAMILY, Font.PLAIN, 13)); table.setFillsViewportHeight(true);
 
+        // 右鍵刪除容錯管線
+        JPopupMenu tablePopupMenu = new JPopupMenu();
+        tablePopupMenu.setBackground(PANEL_BG);
+        tablePopupMenu.setBorder(BorderFactory.createLineBorder(BORDER));
+        
+        JMenuItem deleteItem = new JMenuItem("刪除此筆紀錄 (將扣除對應XP與肌肉量)");
+        deleteItem.setFont(new Font(FONT_FAMILY, Font.BOLD, 12));
+        deleteItem.setForeground(new Color(0xff8a8a)); // 警示紅
+        deleteItem.setBackground(PANEL_BG); deleteItem.setOpaque(true);
+        
+        deleteItem.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow != -1) {
+                // 1. 取得畫面上選中的日期與運動名稱
+                String displayTime = (String) historyModel.getValueAt(selectedRow, 0);
+                String exerciseName = (String) historyModel.getValueAt(selectedRow, 1);
+                
+                // 2. 從記憶體 workouts 集合中，精準過濾揪出那一筆對應的 WorkoutEntry 實體
+                WorkoutEntry targetEntry = workouts.stream()
+                        .filter(w -> w.displayTime().equals(displayTime) && w.getExerciseName().equals(exerciseName))
+                        .findFirst().orElse(null);
+                
+                if (targetEntry != null) {
+                    // 二次彈窗確認，防止二次誤觸
+                    int confirm = JOptionPane.showConfirmDialog(this, 
+                            "確定要刪除這筆【" + exerciseName + "】紀錄嗎？\n角色等級與體態會同步逆向扣除！", 
+                            "刪除確認警告", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    
+                    if (confirm == JOptionPane.YES_OPTION) {
+                        // A. 發動大腦退化引擎
+                        player.deleteWorkoutReward(targetEntry);
+                        // B. 從全域清單中移除
+                        workouts.remove(targetEntry);
+                        // C. 永久同步寫入磁碟並全視窗重繪
+                        saveAndRefresh();
+                        
+                        JOptionPane.showMessageDialog(this, "紀錄已成功撤銷，時空數據已完成逆向水平校正！");
+                    }
+                }
+            }
+        });
+        tablePopupMenu.add(deleteItem);
+
+        // 綁定滑鼠右鍵點擊事件
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) { handleTablePopup(e); }
+            @Override
+            public void mouseReleased(MouseEvent e) { handleTablePopup(e); }
+            
+            private void handleTablePopup(MouseEvent e) {
+                if (e.isPopupTrigger()) { // 判定是否為當前作業系統的右鍵觸發行為
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (row >= 0 && row < table.getRowCount()) {
+                        table.setRowSelectionInterval(row, row); // 自動幫玩家選取該列
+                        tablePopupMenu.show(table, e.getX(), e.getY()); // 在滑鼠座標點噴出選單
+                    }
+                }
+            }
+        });
+
         JTableHeader header = table.getTableHeader();
         header.setDefaultRenderer((table1, value, isSelected, hasFocus, row, column) -> {
             JLabel headerLabel = new JLabel(String.valueOf(value), SwingConstants.LEFT);
@@ -659,7 +716,6 @@ public class FitQuestFrame extends JFrame {
 
     /**
      * 【前端全域阻塞通知】高質感暗黑風升級工作台
-     * 使用 Modal 阻塞機制，確保連續升級時，玩家必須點擊「確認」才會依序彈出下一級！
      */
     private void triggerBlockingLevelUpDialog(int level) {
         JDialog dialog = new JDialog(this, "LEVEL UP", JDialog.ModalityType.APPLICATION_MODAL);
@@ -667,7 +723,7 @@ public class FitQuestFrame extends JFrame {
 
         JPanel panel = new JPanel(new BorderLayout(0, 12));
         panel.setBackground(PANEL_BG);
-        panel.setBorder(BorderFactory.createLineBorder(new Color(0xeab308), 2)); // 奢華黃金榮譽框
+        panel.setBorder(BorderFactory.createLineBorder(new Color(0xeab308), 2)); 
 
         JLabel textLabel = new JLabel("<html><center><span style='font-size:18px; font-weight:bold; color:#eab308;'>🎉 突破基因鎖 🎉</span><br><br><span style='color:#f4f6fb; font-size:13px;'>您的肉體已成功進化，踏入 <span style='font-size:16px; font-weight:bold; color:#5aa9ff;'>" + level + "</span> 級領域！</span></center></html>", SwingConstants.CENTER);
         panel.add(textLabel, BorderLayout.CENTER);
@@ -676,22 +732,19 @@ public class FitQuestFrame extends JFrame {
         okBtn.setFont(new Font(FONT_FAMILY, Font.BOLD, 13));
         okBtn.setBackground(CELL_BG); okBtn.setForeground(ACCENT);
         okBtn.setFocusPainted(false); okBtn.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
-        okBtn.addActionListener(e -> dialog.dispose()); // 點擊後釋放當前視窗，才會釋放阻塞讓下一組 Loop 跑進來
+        okBtn.addActionListener(e -> dialog.dispose()); 
         panel.add(okBtn, BorderLayout.SOUTH);
 
         dialog.setContentPane(panel); 
-        dialog.setVisible(true); // ➔ 這一行會卡住執行緒，直到玩家關閉它
+        dialog.setVisible(true); 
     }
 
-    /*
+    /**
      * 【前端成就阻塞通知】頂級暗黑科幻風榮譽覺醒工作台
-     * 專門解決多成就連發被吞掉的 Bug，利用 Modal 鎖定執行緒，讓成就依序連彈！
      */
     private void triggerBlockingAchievementDialog(String title, String description, String difficulty) {
         JDialog dialog = new JDialog(this, "ACHIEVEMENT UNLOCKED", JDialog.ModalityType.APPLICATION_MODAL);
         dialog.setUndecorated(true); 
-        
-        // 🛠️【優化點 1】將視窗高度從 160 微調至 190，徹底撐開文字防禦線
         dialog.setSize(380, 190); 
         dialog.setLocationRelativeTo(this);
 
@@ -704,17 +757,15 @@ public class FitQuestFrame extends JFrame {
         JLabel headLabel = new JLabel(" ⚔  榮 譽 成 就 覺 醒  ⚔", SwingConstants.CENTER);
         headLabel.setFont(new Font(FONT_FAMILY, Font.BOLD, 14));
         headLabel.setForeground(borderMutedGold);
-        headLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0)); // 給予頂部舒適外邊距
+        headLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0)); 
         panel.add(headLabel, BorderLayout.NORTH);
 
-        // 🛠️【優化點 2】剔除粗暴的 <br><br>，改用精準的 CSS margin 行高微操，確保字型永不被截斷
         JLabel textLabel = new JLabel("<html><center>"
             + "<div style='margin-bottom: 8px; font-size: 16px; font-weight: bold; color: #ffffff;'>【" + title + "】</div>"
             + "<div style='margin-bottom: 6px; color: #b7c0d1; font-size: 12px;'>" + description + "</div>"
             + "<div style='color: #ef4444; font-size: 11px; font-weight: bold;'>[" + difficulty + " 挑戰成功]</div>"
             + "</center></html>", SwingConstants.CENTER);
         
-        // 🛠️ 稍微縮減文字區塊的上下 Padding，把像素完美留給字體本身
         textLabel.setBorder(BorderFactory.createEmptyBorder(4, 16, 4, 16));
         panel.add(textLabel, BorderLayout.CENTER);
 
@@ -731,28 +782,29 @@ public class FitQuestFrame extends JFrame {
 
     private int lastKnownLevel = -1; 
 
-    private void refreshAll() {
+    public void refreshAll() {
         if (scaleButtons.containsKey("WEEK") && scaleButtons.get("WEEK").getBackground().equals(BUTTON_BG)) {
             scaleButtons.get("WEEK").doClick();
         }
 
+        // 在刷新畫面前，精準捕捉大腦物件的「跨級跳躍」差值
         int currentLevel = player.level();
         if (lastKnownLevel == -1) {
             lastKnownLevel = currentLevel; 
         } else if (currentLevel > lastKnownLevel) {
             int levelsGained = currentLevel - lastKnownLevel;
             int startLevel = lastKnownLevel;
-            lastKnownLevel = currentLevel; // 先行同步防線
+            lastKnownLevel = currentLevel; // 立即同步快取線，防止異步重入
 
-            // 依序串聯彈窗：利用 JDialog 的 APPLICATION_MODAL 特性，點完一級才會跳出下一級！
+            // 依序串聯 Modal 彈窗：點完一級才會跳出下一級！
             for (int i = 1; i <= levelsGained; i++) {
                 triggerBlockingLevelUpDialog(startLevel + i);
             }
         }
 
+        // 觸發成就解鎖鏈
         List<Achievement> newUnlocks = player.triggerAchievementCheck();
         if (newUnlocks != null && !newUnlocks.isEmpty()) {
-            // 利用阻塞特性，依序將本次打卡噴出的所有成就一個個彈給使用者看
             for (Achievement ach : newUnlocks) {
                 triggerBlockingAchievementDialog(
                     ach.getTitle(), 
@@ -782,7 +834,7 @@ public class FitQuestFrame extends JFrame {
             ageField.setText(String.valueOf(player.getAge())); 
             heightField.setText(String.valueOf(prof.getHeight()));
             weightField.setText(String.valueOf(prof.getWeight()));
-            fatField.setText(player.getBodyFatPercent() > 0.0 ? String.valueOf(player.getBodyFatPercent()) : ""); // 體脂還原
+            fatField.setText(player.getBodyFatPercent() > 0.0 ? String.valueOf(player.getBodyFatPercent()) : ""); 
             targetWeightField.setText(String.valueOf(player.getTargetWeight()));
             genderBox.setSelectedItem(prof.getGender());
             goalBox.setSelectedItem(player.getFitnessGoal()); 
@@ -828,11 +880,21 @@ public class FitQuestFrame extends JFrame {
 
         todayVolumeLabel.setText(roundedVolume + " / " + DAILY_TRAINING_VOLUME_TARGET);
         todaySetsLabel.setText(totalSets + " 組");
-        String trainedPartsText = trainedParts.isEmpty()
-                ? "尚未訓練"
-                : trainedParts.size() + " 個：" + String.join("、", trainedParts);
+        
+        // 🛠️【佈局防護優化】當部位字數變多時，限制最多顯示 3 個動作，其餘以 ... 代替，徹底解決介面撞牆破圖 Bug
+        String trainedPartsText;
+        if (trainedParts.isEmpty()) {
+            trainedPartsText = "尚未訓練";
+        } else {
+            List<String> partsList = new ArrayList<>(trainedParts);
+            if (partsList.size() > 3) {
+                trainedPartsText = partsList.size() + " 個：" + String.join("、", partsList.subList(0, 3)) + "...";
+            } else {
+                trainedPartsText = partsList.size() + " 個：" + String.join("、", partsList);
+            }
+        }
         todayMusclesLabel.setText("<html>" + trainedPartsText + "</html>");
-        todayMusclesLabel.setToolTipText(trainedPartsText);
+        todayMusclesLabel.setToolTipText(String.join("、", trainedParts)); // 懸浮提示依然顯示完整列表
 
         int progressValue = Math.min(DAILY_TRAINING_VOLUME_TARGET, roundedVolume);
         int progressPercent = Math.min(100, (int) Math.round(totalVolume * 100.0 / DAILY_TRAINING_VOLUME_TARGET));

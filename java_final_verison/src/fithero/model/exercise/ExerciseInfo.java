@@ -20,7 +20,7 @@ public class ExerciseInfo {
     }
 
     // 重訓運動建構子
-    public ExerciseInfo(String name, MuscleGroup targetMuscle, boolean isBodyweight, double difficultyCoefficient) {
+    public ExerciseInfo(String name, MuscleGroup targetMuscle, boolean isBodyweight, double difficultyMultiplier) {
         this.name = name;
         this.met = 0.0;
         this.targetMuscle = targetMuscle;

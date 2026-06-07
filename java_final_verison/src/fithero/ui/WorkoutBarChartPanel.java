@@ -23,7 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 /**
- * 訓練量趨勢圖：顯示 6 類訓練堆疊、總量折線、平均線與週／月／年目標線
+ * 訓練量趨勢圖：完美對齊物理工作量綱(Volume-Scale)，融合 6 類肌群堆疊、總量折線與多尺度自適應安全防線
  */
 public class WorkoutBarChartPanel extends JPanel {
     private static final Color PANEL_BG = new Color(0x20242d);
@@ -50,6 +50,8 @@ public class WorkoutBarChartPanel extends JPanel {
     private final double[] totalChartData = new double[12]; // 儲存當期總高度
     private final String[] chartLabels = new String[12];
     private double averageValue = 0;
+    
+    // 從 FitQuestFrame 傳進來的核心數值指標（基準線）
     private double dailyTarget = 1000.0;
     private double dailyDangerThreshold = 3000.0;
     private boolean hasEnoughData = false;
@@ -96,7 +98,7 @@ public class WorkoutBarChartPanel extends JPanel {
         hasEnoughData = workouts != null
                 && workouts.stream().map(entry -> entry.time().toLocalDate()).distinct().limit(2).count() >= 2;
 
-        // 初始化資料庫
+        // 初始化二維圖表矩陣
         for (int i = 0; i < 12; i++) {
             totalChartData[i] = 0;
             chartLabels[i] = "";
@@ -137,7 +139,7 @@ public class WorkoutBarChartPanel extends JPanel {
             }
         }
 
-        // 計算各柱總和與全域平均值
+        // 統計物理總噸數工作量與全域平均線
         for (int i = 0; i < activeBarCount; i++) {
             double barSum = 0;
             for (int j = 0; j < 6; j++) {
@@ -155,6 +157,7 @@ public class WorkoutBarChartPanel extends JPanel {
         for (WorkoutEntry entry : workouts) {
             LocalDate d = entry.time().toLocalDate();
             if ((d.isAfter(start) || d.isEqual(start)) && (d.isBefore(end) || d.isEqual(end))) {
+                // 實打實提取客觀物理訓練量（重量 × 下數 × 組數）
                 double volume = entry.trainingVolume();
                 ExerciseInfo info = ExerciseRegistry.getExercise(entry.getExerciseName());
                 
@@ -164,7 +167,7 @@ public class WorkoutBarChartPanel extends JPanel {
                 }
 
                 if (info.isAerobic()) {
-                    stackedChartData[slotIndex][5] += volume;
+                    stackedChartData[slotIndex][5] += volume; // 5: 紫色有氧
                 } else {
                     MuscleGroup group = info.getTargetMuscle();
                     if (group == null) {
@@ -172,11 +175,11 @@ public class WorkoutBarChartPanel extends JPanel {
                         continue;
                     }
                     switch (group) {
-                        case CHEST -> stackedChartData[slotIndex][0] += volume;
-                        case BACK  -> stackedChartData[slotIndex][1] += volume;
-                        case LEGS  -> stackedChartData[slotIndex][2] += volume;
-                        case ARMS  -> stackedChartData[slotIndex][3] += volume;
-                        case ABS   -> stackedChartData[slotIndex][4] += volume;
+                        case CHEST -> stackedChartData[slotIndex][0] += volume; // 0: 胸肌
+                        case BACK  -> stackedChartData[slotIndex][1] += volume; // 1: 背肌
+                        case LEGS  -> stackedChartData[slotIndex][2] += volume; // 2: 腿部
+                        case ARMS  -> stackedChartData[slotIndex][3] += volume; // 3: 手臂
+                        case ABS   -> stackedChartData[slotIndex][4] += volume; // 4: 腹部
                         default    -> stackedChartData[slotIndex][4] += volume;
                     }
                 }
@@ -202,30 +205,35 @@ public class WorkoutBarChartPanel extends JPanel {
 
         int activeBarCount = currentScale.equals("WEEK") ? 7 : (currentScale.equals("MONTH") ? 5 : 12);
         
+        // 🛠️【運動科學量綱對齊】在大腦常數（1000）與物理公斤噸數（Volume）間建立 4.5 倍的防超標換算轉換線
+        double volumeScaleFactor = 4.5;
+        double baseVolumeTarget = dailyTarget * volumeScaleFactor;                 // 基準訓練量目標 (4500 kg)
+        double baseVolumeDanger = dailyDangerThreshold * (volumeScaleFactor * 0.9); // 基準訓練量危險值 (12150 kg)
+
         double currentScaleTarget;
         double currentScaleDanger;
         String targetLineLabel;
         String dangerLineLabel;
 
         if (currentScale.equals("WEEK")) {
-            currentScaleTarget = dailyTarget;
-            currentScaleDanger = dailyDangerThreshold;
-            targetLineLabel = "今日目標線";
-            dangerLineLabel = "危險值";
+            currentScaleTarget = baseVolumeTarget;
+            currentScaleDanger = baseVolumeDanger;
+            targetLineLabel = "今日目標量";
+            dangerLineLabel = "極限疲勞值";
         } else if (currentScale.equals("MONTH")) {
-            currentScaleTarget = dailyTarget * 6.0;
-            currentScaleDanger = dailyDangerThreshold * 6.0;
-            targetLineLabel = "區間目標線";
-            dangerLineLabel = "區間危險值";
+            currentScaleTarget = baseVolumeTarget * 6.0;
+            currentScaleDanger = baseVolumeDanger * 6.0;
+            targetLineLabel = "區間目標量";
+            dangerLineLabel = "區間疲勞值";
         } else { // YEAR
-            currentScaleTarget = dailyTarget * 30.0;
-            currentScaleDanger = dailyDangerThreshold * 30.0;
-            targetLineLabel = "每月目標線";
-            dangerLineLabel = "每月危險值";
+            currentScaleTarget = baseVolumeTarget * 30.0;
+            currentScaleDanger = baseVolumeDanger * 30.0;
+            targetLineLabel = "每月目標量";
+            dangerLineLabel = "每月過載值";
         }
 
         // 尋找最大上限值以動態縮放 Y 軸，防止柱子衝出螢幕
-        double max = 300; 
+        double max = 1500; 
         for (int i = 0; i < activeBarCount; i++) {
             if (totalChartData[i] > max) max = totalChartData[i];
         }
@@ -253,7 +261,7 @@ public class WorkoutBarChartPanel extends JPanel {
             g.drawLine(left, y, width - right, y);
         }
 
-        // 目標線會依週、月、年尺度換算。
+        // 繪製目標線與危險虛線
         int yAlertLine = baseline - (int) (currentScaleTarget * chartHeight / max);
         g.setColor(TARGET_COLOR);
         g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 0, new float[] {4f, 6f}, 0));
@@ -302,13 +310,14 @@ public class WorkoutBarChartPanel extends JPanel {
                 }
             }
 
+            // 標籤判定連動全新工作量防線
             if (totalChartData[i] >= currentScaleDanger) {
                 g.setColor(DANGER_COLOR);
-                g.setFont(new Font(FONT_FAMILY, Font.BOLD, 11));
-                g.drawString("危險", x + (barWidth / 2) - 8, currentBottomY - 6);
+                g.setFont(new Font(FONT_FAMILY, Font.BOLD, 10));
+                g.drawString("過載", x + (barWidth / 2) - 8, currentBottomY - 6);
             } else if (totalChartData[i] >= currentScaleTarget) {
                 g.setColor(TARGET_COLOR);
-                g.setFont(new Font(FONT_FAMILY, Font.BOLD, 11));
+                g.setFont(new Font(FONT_FAMILY, Font.BOLD, 10));
                 g.drawString("達標", x + (barWidth / 2) - 8, currentBottomY - 6);
             }
 
@@ -343,7 +352,7 @@ public class WorkoutBarChartPanel extends JPanel {
         g.drawLine(left, yLine, endX, yLine);
 
         // 渲染右側平均值狀態看板
-        String avgLabel = "平均訓練量: " + String.format("%.0f", averageValue);
+        String avgLabel = "平均訓練量: " + String.format("%.0f", averageValue) + " kg";
         g.setFont(new Font(FONT_FAMILY, Font.BOLD, 11));
         FontMetrics boldMetrics = g.getFontMetrics();
         int labelWidth = boldMetrics.stringWidth(avgLabel) + 14;
@@ -361,12 +370,13 @@ public class WorkoutBarChartPanel extends JPanel {
         g.setColor(TEXT);
         g.drawString(avgLabel, lx + 7, ly + 15);
 
-        // 線條標籤最後繪製，避免被堆疊柱狀圖蓋住。
-        drawThresholdLabel(g, targetLineLabel + " (" + (int) currentScaleTarget + ")", left + 4, yAlertLine, TARGET_COLOR);
-        String dangerLabel = dangerLineLabel + " (" + (int) currentScaleDanger + ")";
+        // 最後繪製邊界自適應懸浮標籤
+        drawThresholdLabel(g, targetLineLabel + " (" + (int) currentScaleTarget + " kg)", left + 4, yAlertLine, TARGET_COLOR);
+        
+        String dangerLabelStr = dangerLineLabel + " (" + (int) currentScaleDanger + " kg)";
         g.setFont(new Font(FONT_FAMILY, Font.BOLD, 10));
-        int dangerWidth = g.getFontMetrics().stringWidth(dangerLabel) + 12;
-        drawThresholdLabel(g, dangerLabel, width - right - dangerWidth - 4, yDangerLine - 35, DANGER_COLOR);
+        int dangerWidth = g.getFontMetrics().stringWidth(dangerLabelStr) + 12;
+        drawThresholdLabel(g, dangerLabelStr, width - right - dangerWidth - 4, yDangerLine, DANGER_COLOR);
 
         g.dispose();
     }
@@ -376,7 +386,9 @@ public class WorkoutBarChartPanel extends JPanel {
         FontMetrics metrics = g.getFontMetrics();
         int labelWidth = metrics.stringWidth(text) + 12;
         int labelHeight = 17;
-        int y = Math.max(3, Math.min(getHeight() - labelHeight - 3, lineY - labelHeight - 2));
+        
+        // 自動邊界調節鎖：防止標籤衝出面板邊界
+        int y = Math.max(26, Math.min(getHeight() - labelHeight - 3, lineY - labelHeight - 2));
 
         g.setColor(PANEL_BG);
         g.fillRoundRect(x, y, labelWidth, labelHeight, 7, 7);

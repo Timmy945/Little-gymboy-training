@@ -82,11 +82,9 @@ public class PlayerState {
         Gender g = avatar.getProfile().getGender();
 
         if (bodyFatPercent > 0.0) {
-            // 引擎 A：Katch-McArdle 公式 (精準肌肉代謝模型)
-            double ffm = w * (1.0 - (bodyFatPercent / 100.0)); // 計算除脂體重
+            double ffm = w * (1.0 - (bodyFatPercent / 100.0)); 
             return 370.0 + (21.6 * ffm);
         } else {
-            // 引擎 B：Mifflin-St. Jeor 公式 (大眾體型保底模型)
             if (g == Gender.MALE) {
                 return (10 * w) + (6.25 * h) - (5 * age) + 5;
             } else {
@@ -107,8 +105,8 @@ public class PlayerState {
         }
 
         LocalDate sevenDaysAgo = LocalDate.now().minusDays(7);
-        double currentMuscle = estimateMuscleMass(); // 提取肌肉量
-        fithero.model.player.Gender gender = avatar.getProfile().getGender(); // 提取性別
+        double currentMuscle = estimateMuscleMass(); 
+        Gender gender = avatar.getProfile().getGender(); 
 
         for (WorkoutEntry entry : fullHistory) {
             LocalDate workoutDate = entry.time().toLocalDate();
@@ -118,7 +116,6 @@ public class PlayerState {
                     if (info.isAerobic()) {
                         activityMultiplier += 0.05; 
                     } else {
-                        // 餵入 AII 強度所需之完整 6 大參數
                         int intensity = ExpCalculator.calculateResistanceIntensity(
                                 info, entry.weight(), avatar.getProfile().getWeight(), gender, this.age, currentMuscle);
                         activityMultiplier += (intensity * 0.015); 
@@ -138,29 +135,19 @@ public class PlayerState {
         double w = avatar.getProfile().getWeight();
         Gender g = avatar.getProfile().getGender();
         
-        // 1. 取得體脂率 (若無則依醫學 WHO 算式逆向反推)
         double fatPercent = this.bodyFatPercent;
         if (fatPercent <= 0.0) {
-            // 若玩家沒填體脂率，採用醫學 WHO 體型算式由 BMI 與年齡進行二級逆向反推
             double bmi = calculateBMI();
             int genderCode = (g == Gender.MALE) ? 1 : 0;
             fatPercent = (1.20 * bmi) + (0.23 * age) - (10.8 * genderCode) - 5.4;
-            if (fatPercent < 3.0) fatPercent = 3.0; // 生理脫水極限防護線
+            if (fatPercent < 3.0) fatPercent = 3.0; 
         }
 
-        // 2. 計算精準的「除脂體重 (Fat-Free Mass, FFM)」
         double ffm = w * (1.0 - (fatPercent / 100.0));
-
-        // 3. 採用 Jannsen 骨骼肌質量幾何解析公式
-        // 考量到身高 (H) 與去脂體重對純肌肉的影響
         double h = avatar.getProfile().getHeight();
         double genderBonus = (g == Gender.MALE) ? 1.0 : 0.0;
         
-        // Jannsen 核心算式：(FFM * 0.56) + (身高縮放權重) + 性別加權
-        // 這能完美剔除體內骨骼（約占體重 15%）與內臟器官（約占體重 10%）的重量！
         double pureSkeletalMuscle = (ffm * 0.53) + (h * 0.02) + (1.2 * genderBonus);
-        
-        // 保底防護線
         return Math.max(5.0, pureSkeletalMuscle);
     }
 
@@ -173,9 +160,7 @@ public class PlayerState {
         int muscleValue = avatar.getMuscleParts().getOrDefault(muscle, 0);
         if (muscleValue <= 0) return 1;
         
-        // 將阻尼加權優化為 0.7，大幅提升新手開局的第一眼體感
         int calculatedLevel = (int) Math.sqrt(muscleValue * 0.7) + 1;
-        
         return Math.max(1, calculatedLevel); 
     }
 
@@ -187,6 +172,7 @@ public class PlayerState {
         return Map.copyOf(map);
     }
 
+    // 讓有氧運動打卡能向外傳遞升級資訊
     public int submitAerobicWorkout(String exerciseName, double minutes, List<WorkoutEntry> fullHistory, java.util.Properties planProps) {
         if (!ExerciseRegistry.exists(exerciseName)) return 0;
         ExerciseInfo info = ExerciseRegistry.getExercise(exerciseName);
@@ -195,16 +181,17 @@ public class PlayerState {
         double calories = ExpCalculator.calculateAerobicCalories(info, minutes, userWeight);
         double earnedExp = ExpCalculator.calculateAerobicExp(calories);
 
-        // 【邏輯補齊】檢查並套用三週連擊 1.25 倍加成獎勵
         if (isStreakBonusActive(fullHistory, planProps)) {
             earnedExp *= 1.25;
         }
 
         avatar.setCurrentExp(avatar.getCurrentExp() + earnedExp);
-        checkLevelUp();
+        // 保留大腦原有的升級運算，但把視窗回呼交由前端判定
+        checkLevelUp(); 
         return (int) earnedExp; 
     }
 
+    // 讓阻力訓練打卡能向外傳遞升級資訊
     public int submitResistanceWorkout(String exerciseName, double weightLifted, int reps, int sets, List<WorkoutEntry> fullHistory, java.util.Properties planProps) {
         if (!ExerciseRegistry.exists(exerciseName)) return 0;
         ExerciseInfo info = ExerciseRegistry.getExercise(exerciseName);
@@ -215,12 +202,10 @@ public class PlayerState {
         int intensity = ExpCalculator.calculateResistanceIntensity(info, weightLifted, userWeight, gender, this.age, currentMuscleMass);
         double earnedExp = ExpCalculator.calculateResistanceExp(calories, intensity);
 
-        // 【邏輯補齊】檢查並套用三週連擊 1.25 倍加成獎勵
         if (isStreakBonusActive(fullHistory, planProps)) {
             earnedExp *= 1.25;
         }
 
-        // 【型別安全重構】直接帶入強型別 Enum 執行成長
         MuscleGroup target = info.getTargetMuscle();
         int muscleGain = (int) Math.round(intensity * sets * 0.6);
         avatar.trainMuscle(target, muscleGain);
@@ -259,12 +244,70 @@ public class PlayerState {
     public int checkLevelUp() {
         int levelsGained = 0;
         while (avatar.getCurrentExp() >= avatar.getMaxExp()) {
+            // 1. 扣除當前等級所需的 XP
             avatar.setCurrentExp(avatar.getCurrentExp() - avatar.getMaxExp());
-            avatar.setLevel(avatar.getLevel() + 1);
-            avatar.setMaxExp(avatar.getMaxExp() * 1.2);
+            
+            // 2. 提升玩家等級
+            int nextLevel = avatar.getLevel() + 1;
+            avatar.setLevel(nextLevel);
+            
+            // 3. 動態計算下一級的 XP 需求
+            double nextMaxExp;
+            if (nextLevel <= 15) {
+                // 階段 A (1~15級)：每級穩健遞增 50 XP (Lv.15 需求為 800 XP)
+                nextMaxExp = 100.0 + (nextLevel - 1) * 50.0;
+            } else if (nextLevel <= 40) {
+                // 階段 B (16~40級)：平緩高原期，引入等級微幅加權 (Lv.40 需求為 1900 XP)
+                nextMaxExp = 800.0 + (nextLevel - 15) * 110.0 + (nextLevel * 5.0);
+            } else {
+                // 階段 C (41級以上)：極限傳奇期，全面轉為極限線性控速，每級穩定增加 400 XP
+                nextMaxExp = 3600.0 + (nextLevel - 40) * 400.0;
+            }
+            
+            avatar.setMaxExp(nextMaxExp);
             levelsGained++;
         }
-        return levelsGained; // 回傳這次升了幾級（例如連升 3 級就回傳 3）
+        return levelsGained; 
+    }
+
+    /**
+     * 當使用者刪除紀錄時，將錯誤暴增的 XP 與肌肉量精準扣除
+     */
+    public void deleteWorkoutReward(WorkoutEntry entry) {
+        if (entry == null) return;
+
+        // 1. 逆向扣除玩家經驗值 (防底線保底 0.0)
+        double newExp = avatar.getCurrentExp() - entry.xp();
+        
+        // 處理逆向降級 (反向 checkLevelUp)
+        // 如果扣除 XP 後小於 0，且玩家等級大於 1，必須執行「降級退化邏輯」
+        while (newExp < 0 && avatar.getLevel() > 1) {
+            avatar.setLevel(avatar.getLevel() - 1);
+            // 重新依據當前多段式升級門檻公式，動態逆推前一級的 maxExp
+            int currentLvl = avatar.getLevel();
+            double prevMaxExp = 100.0;
+            if (currentLvl <= 15) prevMaxExp = 100.0 + (currentLvl - 1) * 50.0;
+            else if (currentLvl <= 40) prevMaxExp = 800.0 + (currentLvl - 15) * 110.0 + (currentLvl * 5.0);
+            else prevMaxExp = 3600.0 + (currentLvl - 40) * 400.0;
+            
+            avatar.setMaxExp(prevMaxExp);
+            newExp += prevMaxExp; // 將前一級的經驗值池補回
+        }
+        avatar.setCurrentExp(Math.max(0.0, newExp));
+
+        // 2. 逆向扣除部位肌肉原始值
+        ExerciseInfo info = ExerciseRegistry.getExercise(entry.getExerciseName());
+        if (info != null && !info.isAerobic() && info.getTargetMuscle() != null) {
+            MuscleGroup target = info.getTargetMuscle();
+            int intensity = ExpCalculator.calculateResistanceIntensity(
+                    info, entry.weight(), avatar.getProfile().getWeight(), 
+                    avatar.getProfile().getGender(), this.age, estimateMuscleMass());
+            
+            int muscleGain = (int) Math.round(intensity * entry.sets() * 0.6);
+            
+            int currentRawValue = avatar.getMuscleParts().getOrDefault(target, 0);
+            avatar.getMuscleParts().put(target, Math.max(0, currentRawValue - muscleGain));
+        }
     }
 
     public List<Achievement> triggerAchievementCheck() {
